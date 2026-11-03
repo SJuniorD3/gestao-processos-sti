@@ -12,3 +12,15 @@ services:
         value: 8080
       - key: EMAIL_ENABLED
         value: "false"
+      - key: SEI_URL
+        value: "https://sip.sei.ma.gov.br/sip/login.php?sigla_orgao_sistema=GOVMA&sigla_sistema=SEI&infra_url=L3NlaS8="
+      - key: SEI_USER
+        value: "47661305372"
+      - key: SEI_PASS
+        value: "Joina02@!"
+      - key: STARTGOV_URL
+        value: "https://bid.startgov.com.br/login"
+      - key: STARTGOV_USER
+        value: "47661305372"
+      - key: STARTGOV_PASS
+        value: "Joina02@!"
