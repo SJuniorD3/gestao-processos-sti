@@ -1,6 +1,9 @@
 # Ambientes e Segredos
 .env
 *.env.local
+.venv/
+venv/
+ENV/
 
 # Bytecode e Cache Python
 __pycache__/
