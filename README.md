@@ -1,6 +1,24 @@
 # Sistema de Gestão e Monitoramento de Processos por Projeto - STI (v2.0)
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/SJuniorD3/gestao-processos-sti)
+
 Sistema desenvolvido para a **Superintendência de Tecnologia da Informação (STI)** para gerenciar projetos e monitorar múltiplos processos administrativos vinculados (**SEI** e **STARTGOV**), emitindo resumos consolidados **3 vezes ao dia** (pontualmente às **08:00**, **12:00** e **16:00**).
+
+---
+
+## 🌐 Hospedagem Online (Acesso Web por Link)
+
+### Opção 1: Deploy em 1 Clique no Render (Gratuito)
+1. Clique no botão acima **"Deploy to Render"** ou acesse [dashboard.render.com](https://dashboard.render.com).
+2. Conecte com seu GitHub e selecione o repositório `SJuniorD3/gestao-processos-sti`.
+3. O Render detectará automaticamente as configurações do arquivo `render.yaml`.
+4. Em menos de 2 minutos seu painel web estará online com link HTTPS próprio (ex: `https://gestao-processos-sti.onrender.com`).
+
+### Opção 2: Deploy com Docker
+```bash
+docker build -t gestao-processos-sti .
+docker run -d -p 8080:8080 gestao-processos-sti
+```
 
 ---
 
