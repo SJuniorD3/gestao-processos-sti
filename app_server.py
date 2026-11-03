@@ -5,8 +5,13 @@ from pathlib import Path
 import csv
 import io
 import datetime
+import os
+import hmac
+import hashlib
+import time
+import base64
 
-from config import PORT, HOST, BASE_DIR
+from config import PORT, HOST, BASE_DIR, ADMIN_USER, ADMIN_PASS
 from database import (
     listar_processos, listar_projetos_com_processos, obter_processo, criar_processo, atualizar_processo,
     excluir_processo, obter_projeto, atualizar_projeto, excluir_projeto, listar_ultimos_relatorios,
@@ -18,17 +23,68 @@ from monitor_engine import executar_monitoramento_processos, monitorar_processo_
 from integrations import sei_client, startgov_client
 
 STATIC_DIR = BASE_DIR / "static"
+SECRET_KEY = os.environ.get("SECRET_KEY", "sti_session_secret_token_2026_salt")
+
+def gerar_token():
+    expira_em = int(time.time()) + (7 * 24 * 3600)  # 7 dias
+    dado = f"{ADMIN_USER}:{expira_em}".encode("utf-8")
+    sig = hmac.new(SECRET_KEY.encode("utf-8"), dado, hashlib.sha256).hexdigest()
+    token = base64.urlsafe_b64encode(f"{ADMIN_USER}:{expira_em}:{sig}".encode("utf-8")).decode("utf-8")
+    return token
+
+def validar_token(token):
+    if not token:
+        return False
+    try:
+        decoded = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
+        partes = decoded.split(":")
+        if len(partes) != 3:
+            return False
+        user, expira_str, sig = partes
+        expira_em = int(expira_str)
+        if time.time() > expira_em:
+            return False
+        dado = f"{user}:{expira_em}".encode("utf-8")
+        expected_sig = hmac.new(SECRET_KEY.encode("utf-8"), dado, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(sig, expected_sig) and user == ADMIN_USER
+    except Exception:
+        return False
 
 class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(STATIC_DIR), **kwargs)
+
+    def _is_authenticated(self):
+        # 1. Header Authorization: Bearer <token>
+        auth_header = self.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1].strip()
+            if validar_token(token):
+                return True
+
+        # 2. Cookie sti_session=<token>
+        cookie_header = self.headers.get("Cookie", "")
+        if cookie_header:
+            cookies = [c.strip() for c in cookie_header.split(";")]
+            for c in cookies:
+                if c.startswith("sti_session="):
+                    token = c.split("=", 1)[1].strip()
+                    if validar_token(token):
+                        return True
+        return False
+
+    def _redirect(self, location):
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+        self.end_headers()
 
     def _send_json(self, data, status=200):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
 
@@ -50,6 +106,37 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         query = urllib.parse.parse_qs(parsed.query)
+
+        # Rota pública: verificação de status de auth
+        if path == "/api/auth/check":
+            self._send_json({"success": True, "authenticated": self._is_authenticated()})
+            return
+
+        # Página de login
+        if path == "/login.html":
+            if self._is_authenticated():
+                self._redirect("/index.html")
+                return
+            return super().do_GET()
+
+        # Página Inicial
+        if path == "/" or path == "" or path == "/index.html":
+            if not self._is_authenticated():
+                self._redirect("/login.html")
+                return
+            self.path = "/index.html"
+            return super().do_GET()
+
+        # Recursos estáticos permitidos publicamente
+        if (path.startswith("/css/") or path.startswith("/js/") or 
+            path.endswith(".ico") or path.endswith(".png") or path.endswith(".svg")):
+            return super().do_GET()
+
+        # Todas as rotas /api/... exigem autenticação
+        if path.startswith("/api/"):
+            if not self._is_authenticated():
+                self._send_json({"success": False, "error": "Acesso não autorizado. Faça login primeiro."}, 401)
+                return
 
         # Rota da API: Lista de Processos
         if path == "/api/processos":
@@ -153,6 +240,9 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         # Página Inicial
         if path == "/" or path == "":
+            if not self._is_authenticated():
+                self._redirect("/login.html")
+                return
             self.path = "/index.html"
             return super().do_GET()
 
@@ -161,6 +251,37 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+
+        # Rota de Login (Pública)
+        if path == "/api/auth/login":
+            dados = self._read_json()
+            user = str(dados.get("username", "")).strip()
+            pwd = str(dados.get("password", ""))
+
+            if user == ADMIN_USER and pwd == ADMIN_PASS:
+                token = gerar_token()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Set-Cookie", f"sti_session={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800")
+                self.end_headers()
+                self.wfile.write(json.dumps({"success": True, "token": token, "message": "Login realizado com sucesso!"}).encode("utf-8"))
+            else:
+                self._send_json({"success": False, "error": "Usuário ou senha incorretos."}, 401)
+            return
+
+        # Rota de Logout
+        if path == "/api/auth/logout":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Set-Cookie", "sti_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0")
+            self.end_headers()
+            self.wfile.write(json.dumps({"success": True, "message": "Logout realizado com sucesso."}).encode("utf-8"))
+            return
+
+        # Demais rotas POST exigem autenticação
+        if not self._is_authenticated():
+            self._send_json({"success": False, "error": "Acesso não autorizado. Faça login primeiro."}, 401)
+            return
 
         # Criar Processo
         if path == "/api/processos":
@@ -206,6 +327,10 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
         self._send_json({"success": False, "error": "Rota POST não encontrada"}, 404)
 
     def do_PUT(self):
+        if not self._is_authenticated():
+            self._send_json({"success": False, "error": "Acesso não autorizado. Faça login primeiro."}, 401)
+            return
+
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
 
@@ -240,6 +365,10 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
         self._send_json({"success": False, "error": "Rota PUT não encontrada"}, 404)
 
     def do_DELETE(self):
+        if not self._is_authenticated():
+            self._send_json({"success": False, "error": "Acesso não autorizado. Faça login primeiro."}, 401)
+            return
+
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
 

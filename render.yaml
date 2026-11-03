@@ -24,3 +24,7 @@ services:
         value: "47661305372"
       - key: STARTGOV_PASS
         value: "Joina02@!"
+      - key: ADMIN_USER
+        value: "admin"
+      - key: ADMIN_PASS
+        value: "STIadmin"

@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Acesso Restrito - STI | Gestão de Processos</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      padding: 20px;
+    }
+    .login-container {
+      width: 100%;
+      max-width: 420px;
+      background: #ffffff;
+      border-radius: 14px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+      overflow: hidden;
+      animation: fadeIn 0.4s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .login-header {
+      background: #0f172a;
+      color: white;
+      padding: 32px 24px 24px;
+      text-align: center;
+      border-bottom: 3px solid #2563eb;
+    }
+    .login-badge {
+      display: inline-block;
+      background: #2563eb;
+      color: white;
+      font-weight: 800;
+      font-size: 20px;
+      padding: 6px 18px;
+      border-radius: 8px;
+      letter-spacing: 1.5px;
+      margin-bottom: 12px;
+    }
+    .login-header h1 {
+      font-size: 19px;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .login-header p {
+      font-size: 13px;
+      color: #94a3b8;
+    }
+    .login-body {
+      padding: 32px 28px;
+    }
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 6px;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 12px 14px;
+      font-size: 14px;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 8px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+    }
+    .form-group input:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+    .alert-error {
+      background-color: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #b91c1c;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 18px;
+      display: none;
+    }
+    .btn-submit {
+      width: 100%;
+      background: #2563eb;
+      color: white;
+      border: none;
+      padding: 13px;
+      font-size: 15px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-submit:hover {
+      background: #1d4ed8;
+    }
+    .btn-submit:active {
+      transform: scale(0.99);
+    }
+    .login-footer {
+      text-align: center;
+      padding: 16px 24px 20px;
+      font-size: 12px;
+      color: #64748b;
+      border-top: 1px solid #f1f5f9;
+      background: #fafbfc;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="login-container">
+    <div class="login-header">
+      <div class="login-badge">STI</div>
+      <h1>Superintendência de TI</h1>
+      <p>Gestão de Processos e Monitoramento</p>
+    </div>
+
+    <form class="login-body" id="loginForm" onsubmit="realizarLogin(event)">
+      <div id="alertBox" class="alert-error"></div>
+
+      <div class="form-group">
+        <label for="username">Usuário</label>
+        <input type="text" id="username" name="username" placeholder="Digite seu usuário..." required autofocus autocomplete="username">
+      </div>
+
+      <div class="form-group">
+        <label for="password">Senha</label>
+        <input type="password" id="password" name="password" placeholder="Digite sua senha..." required autocomplete="current-password">
+      </div>
+
+      <button type="submit" class="btn-submit" id="btnSubmit">
+        <span>Acessar Painel</span> ➔
+      </button>
+    </form>
+
+    <div class="login-footer">
+      Ambiente Protegido • STI / SEDUC-MA
+    </div>
+  </div>
+
+  <script>
+    async function realizarLogin(e) {
+      e.preventDefault();
+      const usernameInput = document.getElementById("username");
+      const passwordInput = document.getElementById("password");
+      const alertBox = document.getElementById("alertBox");
+      const btnSubmit = document.getElementById("btnSubmit");
+
+      alertBox.style.display = "none";
+      btnSubmit.disabled = true;
+      btnSubmit.innerHTML = '<span>Autenticando...</span>';
+
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username: usernameInput.value.trim(),
+            password: passwordInput.value
+          })
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          if (data.token) {
+            localStorage.setItem("sti_token", data.token);
+          }
+          window.location.href = "/index.html";
+        } else {
+          alertBox.innerText = data.error || "Usuário ou senha incorretos.";
+          alertBox.style.display = "block";
+          passwordInput.value = "";
+          passwordInput.focus();
+        }
+      } catch (err) {
+        alertBox.innerText = "Erro ao conectar ao servidor. Tente novamente.";
+        alertBox.style.display = "block";
+      } finally {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = '<span>Acessar Painel</span> ➔';
+      }
+    }
+  </script>
+</body>
+</html>

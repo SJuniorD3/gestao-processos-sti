@@ -1,3 +1,28 @@
+// Interceptor global para envio de token e redirecionamento caso 401
+const _originalFetch = window.fetch;
+window.fetch = async function(...args) {
+  const token = localStorage.getItem("sti_token");
+  if (token) {
+    if (!args[1]) args[1] = {};
+    if (!args[1].headers) args[1].headers = {};
+    if (args[1].headers instanceof Headers) {
+      if (!args[1].headers.has("Authorization")) {
+        args[1].headers.set("Authorization", "Bearer " + token);
+      }
+    } else {
+      if (!args[1].headers["Authorization"]) {
+        args[1].headers["Authorization"] = "Bearer " + token;
+      }
+    }
+  }
+  const response = await _originalFetch(...args);
+  if (response.status === 401 && !window.location.pathname.includes("login.html")) {
+    localStorage.removeItem("sti_token");
+    window.location.href = "/login.html";
+  }
+  return response;
+};
+
 let todosProjetos = [];
 let todosProcessos = [];
 
@@ -606,4 +631,13 @@ function abrirProcessoExterno(sistema, numero) {
     url = `https://bid.startgov.com.br/processos?type=all&search=${encodeURIComponent(numero)}`;
   }
   window.open(url, "_blank");
+}
+
+async function fazerLogout() {
+  if (!confirm("Deseja realmente sair do painel STI?")) return;
+  try {
+    await fetch("/api/auth/logout", { method: "POST" });
+  } catch (e) {}
+  localStorage.removeItem("sti_token");
+  window.location.href = "/login.html";
 }
