@@ -1,0 +1,17 @@
+# Ambientes e Segredos
+.env
+*.env.local
+
+# Bytecode e Cache Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Logs
+*.log
+
+# Sistema Operacional
+.DS_Store
+Thumbs.db
