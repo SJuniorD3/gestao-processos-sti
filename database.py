@@ -67,15 +67,29 @@ class UniversalCursor:
             self.lastrowid = getattr(self.cursor, "lastrowid", None)
             return self
 
-    def fetchone(self):
-        row = self.cursor.fetchone()
+    def _clean_val(self, val):
+        if isinstance(val, datetime.datetime):
+            return val.strftime("%d/%m/%Y %H:%M:%S")
+        if isinstance(val, datetime.date):
+            return val.strftime("%d/%m/%Y")
+        return val
+
+    def _clean_row(self, row):
         if row is None:
             return None
-        return dict(row)
+        d = dict(row)
+        for k, v in d.items():
+            if isinstance(v, (datetime.datetime, datetime.date)):
+                d[k] = self._clean_val(v)
+        return d
+
+    def fetchone(self):
+        row = self.cursor.fetchone()
+        return self._clean_row(row)
 
     def fetchall(self):
         rows = self.cursor.fetchall()
-        return [dict(r) for r in rows]
+        return [self._clean_row(r) for r in rows]
 
     @property
     def rowcount(self):
@@ -405,13 +419,12 @@ def init_db():
         except Exception:
             pass
 
-        # Seed inicial do usuário Administrador se não houver nenhum usuário cadastrado
+        # Seed do usuário Administrador se não existir na tabela
         try:
-            cursor.execute("SELECT COUNT(*) as total FROM usuarios")
-            row = cursor.fetchone()
-            total_u = row["total"] if isinstance(row, dict) else row[0]
-            if total_u == 0:
-                admin_username = (ADMIN_USER or "admin").strip().lower()
+            admin_username = (ADMIN_USER or "admin").strip().lower()
+            cursor.execute("SELECT id FROM usuarios WHERE LOWER(usuario) = ?", (admin_username,))
+            admin_row = cursor.fetchone()
+            if not admin_row:
                 admin_password = (ADMIN_PASS or "STIadmin").strip()
                 hash_admin = gerar_hash_senha(admin_password)
                 cursor.execute("""
@@ -453,7 +466,24 @@ def listar_usuarios():
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT id, nome, usuario, perfil, ativo, criado_em FROM usuarios ORDER BY id ASC")
-        return cursor.fetchall()
+        rows = cursor.fetchall()
+        
+        # Garante que o administrador padrão conste no banco e na listagem
+        admin_user = (ADMIN_USER or "admin").strip().lower()
+        has_admin = any(str(r.get("usuario", "")).lower() == admin_user for r in rows)
+        if not has_admin:
+            try:
+                hash_admin = gerar_hash_senha((ADMIN_PASS or "STIadmin").strip())
+                cursor.execute("""
+                    INSERT INTO usuarios (nome, usuario, senha_hash, perfil, ativo)
+                    VALUES (?, ?, ?, 'admin', 1)
+                """, ("Administrador STI", admin_user, hash_admin))
+                conn.commit()
+                cursor.execute("SELECT id, nome, usuario, perfil, ativo, criado_em FROM usuarios ORDER BY id ASC")
+                rows = cursor.fetchall()
+            except Exception as e:
+                print(f"[!] Erro ao auto-inserir admin padrão em listar_usuarios: {e}")
+        return rows
 
 def criar_usuario(nome, usuario, senha, perfil="operador"):
     """Cadastra um novo usuário no sistema com senha criptografada."""

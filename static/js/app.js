@@ -1562,7 +1562,7 @@ function alternarAbaUsuarios(aba) {
 async function carregarUsuarios() {
   const tbody = document.getElementById("tabelaUsuariosCorpo");
   if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="5" class="loading-cell">Carregando usuários...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="5" class="loading-cell">Carregando usuários cadastrados...</td></tr>`;
 
   try {
     const res = await fetch("/api/usuarios");
@@ -1571,10 +1571,11 @@ async function carregarUsuarios() {
       usuariosCache = json.data || [];
       renderizarTabelaUsuarios(usuariosCache);
     } else {
-      tbody.innerHTML = `<tr><td colspan="5" class="loading-cell text-danger">${escapeHtml(json.error)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" class="loading-cell text-danger" style="text-align: center; color: #dc2626; padding: 18px;">⚠️ ${escapeHtml(json.error || 'Erro ao carregar usuários')}</td></tr>`;
     }
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="5" class="loading-cell text-danger">Erro de comunicação com o servidor.</td></tr>`;
+    console.error("Erro ao carregar usuários:", err);
+    tbody.innerHTML = `<tr><td colspan="5" class="loading-cell text-danger" style="text-align: center; color: #dc2626; padding: 18px;">⚠️ Erro de comunicação com o servidor ao listar usuários.</td></tr>`;
   }
 }
 
@@ -1582,42 +1583,47 @@ function renderizarTabelaUsuarios(lista) {
   const tbody = document.getElementById("tabelaUsuariosCorpo");
   if (!tbody) return;
 
-  if (lista.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="loading-cell">Nenhum usuário cadastrado.</td></tr>`;
+  if (!Array.isArray(lista) || lista.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="loading-cell" style="text-align: center; color: #64748b; padding: 20px;">Nenhum usuário cadastrado.</td></tr>`;
     return;
   }
 
   let html = "";
+  const currLogin = (usuarioLogado && usuarioLogado.usuario ? String(usuarioLogado.usuario) : (localStorage.getItem("sti_user") ? JSON.parse(localStorage.getItem("sti_user") || "{}").usuario || "" : "")).toLowerCase();
+
   lista.forEach(u => {
     let perfilBadge = "";
-    if (u.perfil === "admin") {
+    const p = String(u.perfil || "").toLowerCase();
+    if (p === "admin") {
       perfilBadge = `<span style="background: #dbeafe; color: #1e40af; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">Admin</span>`;
-    } else if (u.perfil === "operador") {
+    } else if (p === "operador") {
       perfilBadge = `<span style="background: #fef3c7; color: #92400e; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">Operador</span>`;
     } else {
       perfilBadge = `<span style="background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">Leitor</span>`;
     }
 
-    const statusBadge = u.ativo === 1
+    const ativoNum = (u.ativo === 1 || u.ativo === "1" || u.ativo === true) ? 1 : 0;
+    const statusBadge = ativoNum === 1
       ? `<span style="background: #dcfce7; color: #15803d; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">Ativo</span>`
       : `<span style="background: #fee2e2; color: #b91c1c; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">Inativo</span>`;
 
-    const isSelf = usuarioLogado && (usuarioLogado.usuario.toLowerCase() === u.usuario.toLowerCase());
+    const uLogin = String(u.usuario || "").toLowerCase();
+    const isSelf = currLogin && (currLogin === uLogin);
 
     html += `
       <tr style="border-bottom: 1px solid #f1f5f9;">
-        <td style="padding: 10px 12px; font-weight: 600; color: #0f172a;">${escapeHtml(u.nome)}</td>
-        <td style="padding: 10px 12px; font-family: monospace;">${escapeHtml(u.usuario)}</td>
+        <td style="padding: 10px 12px; font-weight: 600; color: #0f172a;">${escapeHtml(u.nome || u.usuario || "")}</td>
+        <td style="padding: 10px 12px; font-family: monospace; color: #334155;">${escapeHtml(u.usuario || "")}</td>
         <td style="padding: 10px 12px;">${perfilBadge}</td>
         <td style="padding: 10px 12px;">${statusBadge}</td>
         <td style="padding: 10px 12px; text-align: center;">
           <div style="display: flex; gap: 4px; justify-content: center;">
-            <button class="btn btn-sm btn-outline" style="font-size: 11px; padding: 3px 7px;" onclick="editarUsuario(${u.id})">✏️ Editar</button>
+            <button type="button" class="btn btn-sm btn-outline" style="font-size: 11px; padding: 3px 7px;" onclick="editarUsuario(${u.id})">✏️ Editar</button>
             ${!isSelf ? `
-              <button class="btn btn-sm btn-outline" style="font-size: 11px; padding: 3px 7px; color: ${u.ativo === 1 ? '#d97706' : '#15803d'};" onclick="alternarAtivoUsuario(${u.id}, ${u.ativo})">
-                ${u.ativo === 1 ? '⏸ Desativar' : '▶ Ativar'}
+              <button type="button" class="btn btn-sm btn-outline" style="font-size: 11px; padding: 3px 7px; color: ${ativoNum === 1 ? '#d97706' : '#15803d'};" onclick="alternarAtivoUsuario(${u.id}, ${ativoNum})">
+                ${ativoNum === 1 ? '⏸ Desativar' : '▶ Ativar'}
               </button>
-              <button class="btn btn-sm btn-outline" style="font-size: 11px; padding: 3px 7px; color: #dc2626;" onclick="excluirUsuario(${u.id})">🗑️</button>
+              <button type="button" class="btn btn-sm btn-outline" style="font-size: 11px; padding: 3px 7px; color: #dc2626;" onclick="excluirUsuario(${u.id})">🗑️</button>
             ` : '<span style="font-size: 11px; color: #94a3b8; font-style: italic;">(Sua conta)</span>'}
           </div>
         </td>
@@ -1690,6 +1696,8 @@ async function salvarUsuario(e) {
       await carregarUsuarios();
     } else {
       showToast("Erro: " + json.error, "erro");
+      // Recarrega lista para exibir o usuário caso ele já exista
+      await carregarUsuarios();
     }
   } catch (err) {
     showToast("Falha de conexão ao salvar usuário.", "erro");

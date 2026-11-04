@@ -73,6 +73,14 @@ def validar_token(token):
     except Exception:
         return None
 
+def json_serial(obj):
+    """Serializador universal para tipos que o json padrão do Python não serializa (datetime, date, Decimal, etc.)."""
+    if isinstance(obj, (datetime.datetime, datetime.date)):
+        return obj.strftime("%d/%m/%Y %H:%M:%S") if isinstance(obj, datetime.datetime) else obj.strftime("%d/%m/%Y")
+    if hasattr(obj, "__str__"):
+        return str(obj)
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
 class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(STATIC_DIR), **kwargs)
@@ -127,13 +135,18 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def _send_json(self, data, status=200):
+        try:
+            body = json.dumps(data, ensure_ascii=False, indent=2, default=json_serial).encode("utf-8")
+        except Exception as e:
+            body = json.dumps({"success": False, "error": f"Erro de serialização: {str(e)}"}).encode("utf-8")
+            status = 500
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
-        self.wfile.write(json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8"))
+        self.wfile.write(body)
 
     def _read_json(self):
         content_length = int(self.headers.get("Content-Length", 0))
