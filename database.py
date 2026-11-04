@@ -1,8 +1,11 @@
 import sqlite3
 import datetime
 import os
+import hashlib
+import hmac
+import secrets
 from pathlib import Path
-from config import DATABASE_FILE, DATABASE_URL
+from config import DATABASE_FILE, DATABASE_URL, ADMIN_USER, ADMIN_PASS
 
 try:
     import psycopg2
@@ -12,6 +15,20 @@ except ImportError:
 
 def get_is_postgres():
     return bool(DATABASE_URL and psycopg2)
+
+def gerar_hash_senha(senha):
+    """Gera hash PBKDF2-HMAC-SHA256 seguro com salt aleatório de 16 bytes."""
+    salt = secrets.token_hex(16)
+    key = hashlib.pbkdf2_hmac("sha256", senha.encode("utf-8"), salt.encode("utf-8"), 100000).hex()
+    return f"{salt}:{key}"
+
+def verificar_senha(senha, senha_hash):
+    """Verifica se a senha em texto puro corresponde ao hash armazenado."""
+    if not senha_hash or ":" not in senha_hash:
+        return False
+    salt, key = senha_hash.split(":", 1)
+    test_key = hashlib.pbkdf2_hmac("sha256", senha.encode("utf-8"), salt.encode("utf-8"), 100000).hex()
+    return hmac.compare_digest(key, test_key)
 
 class UniversalCursor:
     def __init__(self, raw_cursor, is_postgres=False):
@@ -228,6 +245,31 @@ def init_db():
                     conteudo TEXT
                 )
             """)
+
+            # 5. Tabela de Usuários (PostgreSQL)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS usuarios (
+                    id SERIAL PRIMARY KEY,
+                    nome TEXT NOT NULL,
+                    usuario TEXT NOT NULL UNIQUE,
+                    senha_hash TEXT NOT NULL,
+                    perfil TEXT NOT NULL DEFAULT 'operador',
+                    ativo INTEGER DEFAULT 1,
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # 6. Tabela de Trilha de Auditoria (PostgreSQL)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS auditoria_logs (
+                    id SERIAL PRIMARY KEY,
+                    usuario TEXT NOT NULL,
+                    acao TEXT NOT NULL,
+                    detalhes TEXT,
+                    ip TEXT,
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
         else:
             # 1. Tabela de Projetos (SQLite)
             cursor.execute("""
@@ -285,6 +327,31 @@ def init_db():
                 )
             """)
 
+            # 5. Tabela de Usuários (SQLite)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS usuarios (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nome TEXT NOT NULL,
+                    usuario TEXT NOT NULL UNIQUE,
+                    senha_hash TEXT NOT NULL,
+                    perfil TEXT NOT NULL DEFAULT 'operador',
+                    ativo INTEGER DEFAULT 1,
+                    criado_em TEXT DEFAULT (datetime('now', 'localtime'))
+                )
+            """)
+
+            # 6. Tabela de Trilha de Auditoria (SQLite)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS auditoria_logs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    usuario TEXT NOT NULL,
+                    acao TEXT NOT NULL,
+                    detalhes TEXT,
+                    ip TEXT,
+                    criado_em TEXT DEFAULT (datetime('now', 'localtime'))
+                )
+            """)
+
         # Migração e normalização automática de datas para dia/mês/ano (DD/MM/AAAA)
         try:
             cursor.execute("SELECT id, data_recebimento FROM processos WHERE data_recebimento IS NOT NULL AND data_recebimento != ''")
@@ -307,7 +374,136 @@ def init_db():
         except Exception:
             pass
 
+        # Seed inicial do usuário Administrador se não houver nenhum usuário cadastrado
+        try:
+            cursor.execute("SELECT COUNT(*) as total FROM usuarios")
+            row = cursor.fetchone()
+            total_u = row["total"] if isinstance(row, dict) else row[0]
+            if total_u == 0:
+                admin_username = (ADMIN_USER or "admin").strip().lower()
+                admin_password = (ADMIN_PASS or "STIadmin").strip()
+                hash_admin = gerar_hash_senha(admin_password)
+                cursor.execute("""
+                    INSERT INTO usuarios (nome, usuario, senha_hash, perfil, ativo)
+                    VALUES (?, ?, ?, 'admin', 1)
+                """, ("Administrador STI", admin_username, hash_admin))
+                
+                cursor.execute("""
+                    INSERT INTO auditoria_logs (usuario, acao, detalhes, ip)
+                    VALUES (?, 'SISTEMA_INIT', 'Criação do usuário administrador padrão', '127.0.0.1')
+                """, (admin_username,))
+        except Exception as e:
+            print(f"[!] Aviso ao verificar usuários iniciais: {e}")
+
         conn.commit()
+
+# -------------------------------------------------------------
+# GESTÃO DE USUÁRIOS E PERMISSÕES (RBAC)
+# -------------------------------------------------------------
+def obter_usuario_por_login(usuario):
+    """Busca usuário pelo login (case-insensitive)."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        u_limpo = str(usuario).strip().lower()
+        cursor.execute("SELECT * FROM usuarios WHERE LOWER(usuario) = ?", (u_limpo,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def obter_usuario_por_id(user_id):
+    """Busca usuário pelo ID (sem retornar o hash de senha)."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, nome, usuario, perfil, ativo, criado_em FROM usuarios WHERE id = ?", (user_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def listar_usuarios():
+    """Retorna lista de todos os usuários cadastrados (sem as senhas)."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, nome, usuario, perfil, ativo, criado_em FROM usuarios ORDER BY id ASC")
+        return cursor.fetchall()
+
+def criar_usuario(nome, usuario, senha, perfil="operador"):
+    """Cadastra um novo usuário no sistema com senha criptografada."""
+    u_limpo = str(usuario).strip().lower()
+    n_limpo = str(nome).strip()
+    p_limpo = str(perfil).strip().lower()
+    if p_limpo not in ("admin", "operador", "leitor"):
+        p_limpo = "operador"
+
+    hash_s = gerar_hash_senha(str(senha).strip())
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO usuarios (nome, usuario, senha_hash, perfil, ativo)
+            VALUES (?, ?, ?, ?, 1)
+        """, (n_limpo, u_limpo, hash_s, p_limpo))
+        conn.commit()
+        return cursor.lastrowid
+
+def atualizar_usuario(user_id, nome, perfil, ativo=1, nova_senha=None):
+    """Atualiza dados do usuário e opcionalmente redefine sua senha."""
+    p_limpo = str(perfil).strip().lower()
+    if p_limpo not in ("admin", "operador", "leitor"):
+        p_limpo = "operador"
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        if nova_senha and str(nova_senha).strip():
+            hash_s = gerar_hash_senha(str(nova_senha).strip())
+            cursor.execute("""
+                UPDATE usuarios
+                SET nome = ?, perfil = ?, ativo = ?, senha_hash = ?
+                WHERE id = ?
+            """, (str(nome).strip(), p_limpo, int(ativo), hash_s, user_id))
+        else:
+            cursor.execute("""
+                UPDATE usuarios
+                SET nome = ?, perfil = ?, ativo = ?
+                WHERE id = ?
+            """, (str(nome).strip(), p_limpo, int(ativo), user_id))
+        conn.commit()
+        return True
+
+def excluir_usuario(user_id):
+    """Remove um usuário do sistema."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM usuarios WHERE id = ?", (user_id,))
+        conn.commit()
+        return True
+
+# -------------------------------------------------------------
+# TRILHA DE AUDITORIA
+# -------------------------------------------------------------
+def registrar_auditoria(usuario, acao, detalhes="", ip=""):
+    """Registra uma operação executada por um usuário na trilha de auditoria."""
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO auditoria_logs (usuario, acao, detalhes, ip)
+                VALUES (?, ?, ?, ?)
+            """, (str(usuario or "sistema").strip(), str(acao).strip(), str(detalhes).strip(), str(ip or "").strip()))
+            conn.commit()
+            return cursor.lastrowid
+    except Exception as e:
+        print(f"[!] Erro ao registrar auditoria: {e}")
+        return None
+
+def listar_auditoria(limite=100):
+    """Retorna os registros mais recentes da trilha de auditoria."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, usuario, acao, detalhes, ip, criado_em
+            FROM auditoria_logs
+            ORDER BY id DESC
+            LIMIT ?
+        """, (int(limite),))
+        return cursor.fetchall()
 
 def limpar_todos_os_dados():
     """Remove absolutamente todos os projetos, processos, históricos e relatórios, deixando o sistema 100% zerado."""

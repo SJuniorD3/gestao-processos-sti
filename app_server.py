@@ -15,7 +15,9 @@ from config import PORT, HOST, BASE_DIR, ADMIN_USER, ADMIN_PASS
 from database import (
     listar_processos, listar_projetos_com_processos, obter_processo, criar_processo, atualizar_processo,
     excluir_processo, obter_projeto, obter_ou_criar_projeto, atualizar_projeto, excluir_projeto, listar_ultimos_relatorios,
-    formatar_data_br, formatar_data_hora_br
+    formatar_data_br, formatar_data_hora_br,
+    obter_usuario_por_login, obter_usuario_por_id, listar_usuarios, criar_usuario, atualizar_usuario, excluir_usuario,
+    registrar_auditoria, listar_auditoria, verificar_senha
 )
 from scheduler import scheduler
 from notifier import gerar_conteudo_resumo
@@ -25,42 +27,55 @@ from integrations import sei_client, startgov_client
 STATIC_DIR = BASE_DIR / "static"
 SECRET_KEY = os.environ.get("SECRET_KEY", "sti_session_secret_token_2026_salt")
 
-def gerar_token():
+def gerar_token(usuario, perfil="operador"):
     expira_em = int(time.time()) + (7 * 24 * 3600)  # 7 dias
-    dado = f"{ADMIN_USER}:{expira_em}".encode("utf-8")
+    dado = f"{usuario}:{perfil}:{expira_em}".encode("utf-8")
     sig = hmac.new(SECRET_KEY.encode("utf-8"), dado, hashlib.sha256).hexdigest()
-    token = base64.urlsafe_b64encode(f"{ADMIN_USER}:{expira_em}:{sig}".encode("utf-8")).decode("utf-8")
+    token = base64.urlsafe_b64encode(f"{usuario}:{perfil}:{expira_em}:{sig}".encode("utf-8")).decode("utf-8")
     return token
 
 def validar_token(token):
     if not token:
-        return False
+        return None
     try:
         decoded = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
         partes = decoded.split(":")
-        if len(partes) != 3:
-            return False
-        user, expira_str, sig = partes
-        expira_em = int(expira_str)
-        if time.time() > expira_em:
-            return False
-        dado = f"{user}:{expira_em}".encode("utf-8")
-        expected_sig = hmac.new(SECRET_KEY.encode("utf-8"), dado, hashlib.sha256).hexdigest()
-        return hmac.compare_digest(sig, expected_sig) and user == ADMIN_USER
+        # Suporta formato novo (4 partes: user:perfil:expira:sig)
+        if len(partes) == 4:
+            user, perfil, expira_str, sig = partes
+            expira_em = int(expira_str)
+            if time.time() > expira_em:
+                return None
+            dado = f"{user}:{perfil}:{expira_str}".encode("utf-8")
+            expected_sig = hmac.new(SECRET_KEY.encode("utf-8"), dado, hashlib.sha256).hexdigest()
+            if hmac.compare_digest(sig, expected_sig):
+                return {"usuario": user, "perfil": perfil}
+        # Formato legado (3 partes: user:expira:sig)
+        elif len(partes) == 3:
+            user, expira_str, sig = partes
+            expira_em = int(expira_str)
+            if time.time() > expira_em:
+                return None
+            dado = f"{user}:{expira_str}".encode("utf-8")
+            expected_sig = hmac.new(SECRET_KEY.encode("utf-8"), dado, hashlib.sha256).hexdigest()
+            if hmac.compare_digest(sig, expected_sig):
+                return {"usuario": user, "perfil": "admin" if user.lower() == (ADMIN_USER or "admin").lower() else "operador"}
+        return None
     except Exception:
-        return False
+        return None
 
 class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(STATIC_DIR), **kwargs)
 
-    def _is_authenticated(self):
+    def _get_current_user(self):
         # 1. Header Authorization: Bearer <token>
         auth_header = self.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header.split(" ", 1)[1].strip()
-            if validar_token(token):
-                return True
+            user_data = validar_token(token)
+            if user_data:
+                return user_data
 
         # 2. Cookie sti_session=<token>
         cookie_header = self.headers.get("Cookie", "")
@@ -69,9 +84,32 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
             for c in cookies:
                 if c.startswith("sti_session="):
                     token = c.split("=", 1)[1].strip()
-                    if validar_token(token):
-                        return True
-        return False
+                    user_data = validar_token(token)
+                    if user_data:
+                        return user_data
+        return None
+
+    def _is_authenticated(self):
+        return self._get_current_user() is not None
+
+    def _require_role(self, *roles):
+        user = self._get_current_user()
+        if not user:
+            self._send_json({"success": False, "error": "Acesso não autorizado. Faça login primeiro."}, 401)
+            return None
+        if roles and user.get("perfil") not in roles:
+            self._send_json({"success": False, "error": f"Acesso restrito. Seu perfil ({user.get('perfil')}) não possui permissão para esta ação."}, 403)
+            return None
+        return user
+
+    def _get_client_ip(self):
+        forwarded = self.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        real_ip = self.headers.get("X-Real-IP")
+        if real_ip:
+            return real_ip.strip()
+        return self.client_address[0] if self.client_address else "127.0.0.1"
 
     def _redirect(self, location):
         self.send_response(302)
@@ -194,6 +232,34 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json({"success": True, "data": resumo})
             return
 
+        # Rota da API: Informações do Usuário Atual
+        if path == "/api/auth/me":
+            curr = self._get_current_user()
+            if curr:
+                u_db = obter_usuario_por_login(curr["usuario"])
+                nome = u_db.get("nome", curr["usuario"]) if u_db else curr["usuario"]
+                user_id = u_db.get("id") if u_db else 0
+                self._send_json({"success": True, "data": {"id": user_id, "usuario": curr["usuario"], "nome": nome, "perfil": curr["perfil"]}})
+            else:
+                self._send_json({"success": False, "error": "Não autenticado"}, 401)
+            return
+
+        # Rota da API: Lista de Usuários (Admin)
+        if path == "/api/usuarios":
+            if not self._require_role("admin"):
+                return
+            users = listar_usuarios()
+            self._send_json({"success": True, "data": users})
+            return
+
+        # Rota da API: Trilha de Auditoria (Admin)
+        if path == "/api/auditoria":
+            if not self._require_role("admin"):
+                return
+            logs = listar_auditoria(100)
+            self._send_json({"success": True, "data": logs})
+            return
+
         # Rota da API: Informações dos Sistemas Integrados
         if path == "/api/sistemas":
             self._send_json({
@@ -255,22 +321,60 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
         # Rota de Login (Pública)
         if path == "/api/auth/login":
             dados = self._read_json()
-            user = str(dados.get("username", "")).strip()
-            pwd = str(dados.get("password", ""))
+            user_input = str(dados.get("username", "")).strip().lower()
+            pwd_input = str(dados.get("password", ""))
 
-            if user == ADMIN_USER and pwd == ADMIN_PASS:
-                token = gerar_token()
+            if not user_input or not pwd_input:
+                self._send_json({"success": False, "error": "Usuário e senha são obrigatórios."}, 400)
+                return
+
+            autenticado = False
+            perfil = "operador"
+            nome_usuario = user_input
+
+            u_db = obter_usuario_por_login(user_input)
+            if u_db:
+                if u_db.get("ativo", 1) == 0:
+                    self._send_json({"success": False, "error": "Este usuário foi desativado. Contate o administrador."}, 403)
+                    return
+                if verificar_senha(pwd_input, u_db["senha_hash"]):
+                    autenticado = True
+                    perfil = u_db.get("perfil", "operador")
+                    nome_usuario = u_db.get("nome", user_input)
+            elif user_input == (ADMIN_USER or "admin").strip().lower() and pwd_input == (ADMIN_PASS or "STIadmin"):
+                autenticado = True
+                perfil = "admin"
+                nome_usuario = "Administrador STI"
+
+            if autenticado:
+                token = gerar_token(user_input, perfil)
+                ip = self._get_client_ip()
+                registrar_auditoria(user_input, "LOGIN", f"Login efetuado com sucesso (Perfil: {perfil})", ip)
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Set-Cookie", f"sti_session={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800")
                 self.end_headers()
-                self.wfile.write(json.dumps({"success": True, "token": token, "message": "Login realizado com sucesso!"}).encode("utf-8"))
+                self.wfile.write(json.dumps({
+                    "success": True,
+                    "token": token,
+                    "user": {
+                        "usuario": user_input,
+                        "nome": nome_usuario,
+                        "perfil": perfil
+                    },
+                    "message": "Login realizado com sucesso!"
+                }).encode("utf-8"))
             else:
+                ip = self._get_client_ip()
+                registrar_auditoria(user_input or "anonimo", "LOGIN_FALHA", "Tentativa de login sem sucesso", ip)
                 self._send_json({"success": False, "error": "Usuário ou senha incorretos."}, 401)
             return
 
         # Rota de Logout
         if path == "/api/auth/logout":
+            curr = self._get_current_user()
+            if curr:
+                registrar_auditoria(curr["usuario"], "LOGOUT", "Encerramento voluntário de sessão", self._get_client_ip())
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Set-Cookie", "sti_session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0")
@@ -283,8 +387,39 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json({"success": False, "error": "Acesso não autorizado. Faça login primeiro."}, 401)
             return
 
+        # Cadastrar Novo Usuário (Admin)
+        if path == "/api/usuarios":
+            curr = self._require_role("admin")
+            if not curr:
+                return
+            dados = self._read_json()
+            nome = str(dados.get("nome", "")).strip()
+            usuario = str(dados.get("usuario", "")).strip().lower()
+            senha = str(dados.get("senha", "")).strip()
+            perfil = str(dados.get("perfil", "operador")).strip().lower()
+
+            if not nome or not usuario or not senha:
+                self._send_json({"success": False, "error": "Nome, login e senha são obrigatórios."}, 400)
+                return
+
+            existente = obter_usuario_por_login(usuario)
+            if existente:
+                self._send_json({"success": False, "error": f"O usuário '{usuario}' já existe no sistema."}, 400)
+                return
+
+            try:
+                novo_id = criar_usuario(nome, usuario, senha, perfil)
+                registrar_auditoria(curr["usuario"], "CRIAR_USUARIO", f"Cadastrou usuário '{usuario}' ({perfil})", self._get_client_ip())
+                self._send_json({"success": True, "id": novo_id, "message": f"Usuário '{usuario}' cadastrado com sucesso!"}, 201)
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 400)
+            return
+
         # Criar Projeto Diretamente
         if path == "/api/projetos":
+            curr = self._require_role("admin", "operador")
+            if not curr:
+                return
             dados = self._read_json()
             nome = str(dados.get("nome", "")).strip()
             desc = str(dados.get("descricao", "")).strip()
@@ -293,6 +428,7 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                 return
             try:
                 proj_id = obter_ou_criar_projeto(nome, desc)
+                registrar_auditoria(curr["usuario"], "CRIAR_PROJETO", f"Cadastrou projeto '{nome}' (ID {proj_id})", self._get_client_ip())
                 self._send_json({"success": True, "id": proj_id, "message": "Projeto cadastrado com sucesso!"}, 201)
             except Exception as e:
                 self._send_json({"success": False, "error": f"Erro ao cadastrar projeto: {str(e)}"}, 400)
@@ -300,12 +436,16 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         # Criar Processo
         if path == "/api/processos":
+            curr = self._require_role("admin", "operador")
+            if not curr:
+                return
             dados = self._read_json()
             if not dados.get("numero_processo"):
                 self._send_json({"success": False, "error": "O Número do Processo é obrigatório para cadastro."}, 400)
                 return
             try:
                 novo_id = criar_processo(dados)
+                registrar_auditoria(curr["usuario"], "CRIAR_PROCESSO", f"Cadastrou processo '{dados.get('numero_processo')}' no sistema '{dados.get('sistema')}'", self._get_client_ip())
                 self._send_json({"success": True, "id": novo_id, "message": "Processo cadastrado com sucesso!"}, 201)
             except Exception as e:
                 self._send_json({"success": False, "error": f"Erro ao cadastrar: {str(e)}"}, 400)
@@ -313,8 +453,12 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         # Disparo Manual do Relatório
         if path == "/api/scheduler/disparar":
+            curr = self._require_role("admin", "operador")
+            if not curr:
+                return
             try:
                 res = scheduler.disparar_manual()
+                registrar_auditoria(curr["usuario"], "DISPARAR_RELATORIO", "Disparou resumo diário manualmente", self._get_client_ip())
                 self._send_json({"success": True, "data": res})
             except Exception as e:
                 self._send_json({"success": False, "error": str(e)}, 500)
@@ -322,8 +466,12 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         # Executar Monitoramento Completo nos Portais SEI / STARTGOV
         if path == "/api/monitoramento/executar":
+            curr = self._require_role("admin", "operador")
+            if not curr:
+                return
             try:
                 resumo = executar_monitoramento_processos()
+                registrar_auditoria(curr["usuario"], "SINCRONIZAR_TODOS", f"Executou sincronização geral ({resumo.get('total_atualizados')}/{resumo.get('total_verificados')} atualizados)", self._get_client_ip())
                 self._send_json({"success": True, "data": resumo})
             except Exception as e:
                 self._send_json({"success": False, "error": str(e)}, 500)
@@ -331,9 +479,14 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         # Executar Monitoramento de um Processo Específico
         if path.startswith("/api/monitoramento/processo/"):
+            curr = self._require_role("admin", "operador")
+            if not curr:
+                return
             try:
                 proc_id = int(path.split("/")[-1])
                 res = monitorar_processo_individual(proc_id)
+                if res.get("sucesso"):
+                    registrar_auditoria(curr["usuario"], "SINCRONIZAR_PROCESSO", f"Sincronizou processo ID {proc_id} ({res.get('dados', {}).get('local_atual')})", self._get_client_ip())
                 self._send_json(res)
             except Exception as e:
                 self._send_json({"success": False, "error": str(e)}, 500)
@@ -341,6 +494,9 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         # Testar Credenciais e Conexão dos Robôs SEI e STARTGOV
         if path == "/api/sistemas/testar":
+            curr = self._require_role("admin")
+            if not curr:
+                return
             try:
                 res_sei = {}
                 res_startgov = {}
@@ -358,6 +514,8 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                     res_startgov = {"configurado": True, "sucesso": ok_start, "mensagem": msg_start}
                 else:
                     res_startgov = {"configurado": False, "sucesso": False, "mensagem": "Variáveis STARTGOV_USER ou STARTGOV_PASS não preenchidas no ambiente."}
+
+                registrar_auditoria(curr["usuario"], "TESTAR_ROBOS", f"Testou conexões (SEI: {res_sei.get('sucesso')}, StartGov: {res_startgov.get('sucesso')})", self._get_client_ip())
 
                 self._send_json({
                     "success": True,
@@ -380,13 +538,36 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
 
+        # Atualizar Usuário (Admin)
+        if path.startswith("/api/usuarios/"):
+            curr = self._require_role("admin")
+            if not curr:
+                return
+            try:
+                user_id = int(path.split("/")[-1])
+                dados = self._read_json()
+                nome = dados.get("nome", "")
+                perfil = dados.get("perfil", "operador")
+                ativo = dados.get("ativo", 1)
+                senha = dados.get("senha")
+                atualizar_usuario(user_id, nome, perfil, ativo, senha)
+                registrar_auditoria(curr["usuario"], "EDITAR_USUARIO", f"Atualizou usuário ID {user_id} (Perfil: {perfil}, Ativo: {ativo})", self._get_client_ip())
+                self._send_json({"success": True, "message": "Usuário atualizado com sucesso!"})
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 400)
+            return
+
         # Atualizar Projeto
         if path.startswith("/api/projetos/"):
+            curr = self._require_role("admin", "operador")
+            if not curr:
+                return
             try:
                 proj_id = int(path.split("/")[-1])
                 dados = self._read_json()
                 sucesso = atualizar_projeto(proj_id, dados.get("nome", ""), dados.get("descricao", ""))
                 if sucesso:
+                    registrar_auditoria(curr["usuario"], "EDITAR_PROJETO", f"Atualizou projeto ID {proj_id} ({dados.get('nome')})", self._get_client_ip())
                     self._send_json({"success": True, "message": "Projeto atualizado com sucesso!"})
                 else:
                     self._send_json({"success": False, "error": "Projeto não encontrado para atualização"}, 404)
@@ -396,11 +577,15 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         # Atualizar Processo
         if path.startswith("/api/processos/"):
+            curr = self._require_role("admin", "operador")
+            if not curr:
+                return
             try:
                 proc_id = int(path.split("/")[-1])
                 dados = self._read_json()
                 sucesso = atualizar_processo(proc_id, dados)
                 if sucesso:
+                    registrar_auditoria(curr["usuario"], "EDITAR_PROCESSO", f"Atualizou processo ID {proc_id} ({dados.get('numero_processo')})", self._get_client_ip())
                     self._send_json({"success": True, "message": "Processo atualizado com sucesso!"})
                 else:
                     self._send_json({"success": False, "error": "Processo não encontrado para atualização"}, 404)
@@ -418,12 +603,37 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
 
-        # Excluir Projeto (e seus processos vinculados)
+        # Excluir Usuário (Admin apenas)
+        if path.startswith("/api/usuarios/"):
+            curr = self._require_role("admin")
+            if not curr:
+                return
+            try:
+                u_id = int(path.split("/")[-1])
+                alvo = obter_usuario_por_id(u_id)
+                if not alvo:
+                    self._send_json({"success": False, "error": "Usuário não encontrado."}, 404)
+                    return
+                if alvo["usuario"].lower() == curr["usuario"].lower():
+                    self._send_json({"success": False, "error": "Você não pode excluir sua própria conta de usuário logada."}, 400)
+                    return
+                excluir_usuario(u_id)
+                registrar_auditoria(curr["usuario"], "EXCLUIR_USUARIO", f"Removeu usuário '{alvo['usuario']}' (ID {u_id})", self._get_client_ip())
+                self._send_json({"success": True, "message": f"Usuário '{alvo['usuario']}' excluído com sucesso!"})
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 400)
+            return
+
+        # Excluir Projeto (Admin apenas)
         if path.startswith("/api/projetos/"):
+            curr = self._require_role("admin")
+            if not curr:
+                return
             try:
                 proj_id = int(path.split("/")[-1])
                 sucesso = excluir_projeto(proj_id)
                 if sucesso:
+                    registrar_auditoria(curr["usuario"], "EXCLUIR_PROJETO", f"Excluiu projeto ID {proj_id}", self._get_client_ip())
                     self._send_json({"success": True, "message": "Projeto e seus processos removidos com sucesso!"})
                 else:
                     self._send_json({"success": False, "error": "Projeto não encontrado"}, 404)
@@ -431,11 +641,16 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json({"success": False, "error": str(e)}, 400)
             return
 
+        # Excluir Processo (Admin apenas)
         if path.startswith("/api/processos/"):
+            curr = self._require_role("admin")
+            if not curr:
+                return
             try:
                 proc_id = int(path.split("/")[-1])
                 sucesso = excluir_processo(proc_id)
                 if sucesso:
+                    registrar_auditoria(curr["usuario"], "EXCLUIR_PROCESSO", f"Excluiu processo ID {proc_id}", self._get_client_ip())
                     self._send_json({"success": True, "message": "Processo removido com sucesso!"})
                 else:
                     self._send_json({"success": False, "error": "Processo não encontrado"}, 404)

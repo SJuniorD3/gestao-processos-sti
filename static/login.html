@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Acesso Restrito - STI | Gestão de Processos</title>
-  <link rel="stylesheet" href="/css/style.css?v=3.0.3">
+  <link rel="stylesheet" href="/css/style.css?v=3.2.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -205,6 +205,9 @@
         if (res.ok && data.success) {
           if (data.token) {
             localStorage.setItem("sti_token", data.token);
+          }
+          if (data.user) {
+            localStorage.setItem("sti_user", JSON.stringify(data.user));
           }
           window.location.href = "/index.html";
         } else {

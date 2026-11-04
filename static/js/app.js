@@ -27,13 +27,63 @@ let todosProjetos = [];
 let todosProcessos = [];
 let modoVisualizacaoAtual = "tabela";
 let projetosFiltradosCache = [];
+let usuarioLogado = null;
 
 document.addEventListener("DOMContentLoaded", () => {
+  carregarUsuarioAtual();
   carregarDados();
   atualizarStatusAgendador();
   carregarHistoricoDisparos();
   setInterval(atualizarStatusAgendador, 30000);
 });
+
+async function carregarUsuarioAtual() {
+  try {
+    const res = await fetch("/api/auth/me");
+    const json = await res.json();
+    if (json.success && json.data) {
+      usuarioLogado = json.data;
+      const lbl = document.getElementById("labelNomeUsuario");
+      const badge = document.getElementById("badgePerfilUsuario");
+      const btnAdmin = document.getElementById("btnAdminUsuarios");
+
+      if (lbl) lbl.textContent = usuarioLogado.nome || usuarioLogado.usuario;
+      if (badge) {
+        if (usuarioLogado.perfil === "admin") {
+          badge.textContent = "Admin";
+          badge.style.background = "#dbeafe";
+          badge.style.color = "#1e40af";
+        } else if (usuarioLogado.perfil === "operador") {
+          badge.textContent = "Operador";
+          badge.style.background = "#fef3c7";
+          badge.style.color = "#92400e";
+        } else {
+          badge.textContent = "Leitor";
+          badge.style.background = "#f1f5f9";
+          badge.style.color = "#475569";
+        }
+      }
+
+      if (btnAdmin) {
+        btnAdmin.style.display = usuarioLogado.perfil === "admin" ? "inline-flex" : "none";
+      }
+
+      // Restrições visuais para perfil 'leitor' (Apenas Consulta)
+      if (usuarioLogado.perfil === "leitor") {
+        const btnProc = document.getElementById("btnHeaderNovoProcesso");
+        const btnProj = document.getElementById("btnHeaderNovoProjeto");
+        const btnEditProj = document.getElementById("btnHeaderEditarProjeto");
+        const btnSync = document.getElementById("btnHeaderSincronizar");
+        if (btnProc) btnProc.style.display = "none";
+        if (btnProj) btnProj.style.display = "none";
+        if (btnEditProj) btnEditProj.style.display = "none";
+        if (btnSync) btnSync.style.display = "none";
+      }
+    }
+  } catch (err) {
+    console.error("Erro ao carregar usuário atual:", err);
+  }
+}
 
 async function carregarDados() {
   try {
@@ -152,26 +202,40 @@ function renderizarTabela(listaProjetos) {
       // CÉLULA MESCLADA DO PROJETO E DA DESCRIÇÃO (SEM CORES, LINHAS FINAS)
       let celulaProjeto = "";
       let celulaDesc = "";
+      const isLeitor = usuarioLogado && usuarioLogado.perfil === "leitor";
+
       if (idx === 0) {
         celulaProjeto = `
           <td rowspan="${totalP}" class="cell-projeto" style="vertical-align: top; background: white; font-weight: 700; color: #111827;">
-            <div style="cursor: pointer;" onclick="abrirModalEditarProjeto(${proj.id})" title="Clique para editar o projeto">${escapeHtml(proj.nome)}</div>
-            <div style="margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap;">
-              <button class="btn btn-sm btn-outline" style="font-size: 11px; color: #374151; border: 1px solid #d1d5db; padding: 1px 5px;" onclick="abrirModalEditarProjeto(${proj.id})">
-                ✏️ Editar Projeto
-              </button>
-              <button class="btn btn-sm btn-outline" style="font-size: 11px; color: #374151; border: 1px solid #d1d5db; padding: 1px 5px;" onclick="abrirModalNovoProcessoComProjeto('${escapeHtml(proj.nome)}')">
-                ➕ Add Processo
-              </button>
-            </div>
+            <div style="cursor: pointer;" onclick="${isLeitor ? '' : `abrirModalEditarProjeto(${proj.id})`}" title="${isLeitor ? '' : 'Clique para editar o projeto'}">${escapeHtml(proj.nome)}</div>
+            ${!isLeitor ? `
+              <div style="margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap;">
+                <button class="btn btn-sm btn-outline" style="font-size: 11px; color: #374151; border: 1px solid #d1d5db; padding: 1px 5px;" onclick="abrirModalEditarProjeto(${proj.id})">
+                  ✏️ Editar Projeto
+                </button>
+                <button class="btn btn-sm btn-outline" style="font-size: 11px; color: #374151; border: 1px solid #d1d5db; padding: 1px 5px;" onclick="abrirModalNovoProcessoComProjeto('${escapeHtml(proj.nome)}')">
+                  ➕ Add Processo
+                </button>
+              </div>
+            ` : ''}
           </td>
         `;
         celulaDesc = `
-          <td rowspan="${totalP}" class="cell-desc" style="vertical-align: top; background: white; font-size: 12px; color: #374151; cursor: pointer;" onclick="abrirModalEditarProjeto(${proj.id})" title="Clique para editar a descrição do projeto">
+          <td rowspan="${totalP}" class="cell-desc" style="vertical-align: top; background: white; font-size: 12px; color: #374151;">
             ${escapeHtml(proj.descricao || "-")}
           </td>
         `;
       }
+
+      const botoesAcao = !isLeitor ? `
+        <div class="action-btns">
+          <button class="btn-icon-action" title="Sincronizar no portal" onclick="sincronizarProcessoWeb(${p.id})">🔄</button>
+          <button class="btn-icon-action" title="Editar processo" onclick="abrirModalEditarProcesso(${p.id})">✏️</button>
+          ${usuarioLogado && usuarioLogado.perfil === "admin" ? `
+            <button class="btn-icon-action" title="Excluir processo" onclick="confirmarExclusao(${p.id}, '${escapeHtml(p.numero_processo)}')">🗑️</button>
+          ` : ''}
+        </div>
+      ` : `<span style="font-size: 11px; color: #94a3b8; font-style: italic;">Consulta</span>`;
 
       htmlTotal += `
         <tr>
@@ -196,11 +260,7 @@ function renderizarTabela(listaProjetos) {
             </button>
           </td>
           <td class="text-center">
-            <div class="action-btns">
-              <button class="btn-icon-action" title="Sincronizar no portal" onclick="sincronizarProcessoWeb(${p.id})">🔄</button>
-              <button class="btn-icon-action" title="Editar processo" onclick="abrirModalEditarProcesso(${p.id})">✏️</button>
-              <button class="btn-icon-action" title="Excluir processo" onclick="confirmarExclusao(${p.id}, '${escapeHtml(p.numero_processo)}')">🗑️</button>
-            </div>
+            ${botoesAcao}
           </td>
         </tr>
       `;
@@ -1260,5 +1320,276 @@ async function fazerLogout() {
     await fetch("/api/auth/logout", { method: "POST" });
   } catch (e) {}
   localStorage.removeItem("sti_token");
+  localStorage.removeItem("sti_user");
   window.location.href = "/login.html";
+}
+
+// -------------------------------------------------------------
+// GESTÃO DE USUÁRIOS E AUDITORIA (MULTI-USUÁRIO & RBAC)
+// -------------------------------------------------------------
+let usuariosCache = [];
+
+async function abrirModalUsuarios() {
+  document.getElementById("modalUsuarios").style.display = "flex";
+  alternarAbaUsuarios("usuarios");
+}
+
+function fecharModalUsuarios() {
+  document.getElementById("modalUsuarios").style.display = "none";
+}
+
+function alternarAbaUsuarios(aba) {
+  const btnU = document.getElementById("tabBtnUsuarios");
+  const btnA = document.getElementById("tabBtnAuditoria");
+  const abaU = document.getElementById("abaConteudoUsuarios");
+  const abaA = document.getElementById("abaConteudoAuditoria");
+
+  if (aba === "usuarios") {
+    btnU.className = "view-btn active";
+    btnU.style.borderBottom = "2px solid #2563eb";
+    btnU.style.fontWeight = "700";
+    btnA.className = "view-btn";
+    btnA.style.borderBottom = "none";
+    btnA.style.fontWeight = "600";
+    abaU.style.display = "block";
+    abaA.style.display = "none";
+    carregarUsuarios();
+  } else {
+    btnA.className = "view-btn active";
+    btnA.style.borderBottom = "2px solid #2563eb";
+    btnA.style.fontWeight = "700";
+    btnU.className = "view-btn";
+    btnU.style.borderBottom = "none";
+    btnU.style.fontWeight = "600";
+    abaA.style.display = "block";
+    abaU.style.display = "none";
+    carregarLogsAuditoria();
+  }
+}
+
+async function carregarUsuarios() {
+  const tbody = document.getElementById("tabelaUsuariosCorpo");
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="5" class="loading-cell">Carregando usuários...</td></tr>`;
+
+  try {
+    const res = await fetch("/api/usuarios");
+    const json = await res.json();
+    if (json.success) {
+      usuariosCache = json.data || [];
+      renderizarTabelaUsuarios(usuariosCache);
+    } else {
+      tbody.innerHTML = `<tr><td colspan="5" class="loading-cell text-danger">${escapeHtml(json.error)}</td></tr>`;
+    }
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" class="loading-cell text-danger">Erro de comunicação com o servidor.</td></tr>`;
+  }
+}
+
+function renderizarTabelaUsuarios(lista) {
+  const tbody = document.getElementById("tabelaUsuariosCorpo");
+  if (!tbody) return;
+
+  if (lista.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="loading-cell">Nenhum usuário cadastrado.</td></tr>`;
+    return;
+  }
+
+  let html = "";
+  lista.forEach(u => {
+    let perfilBadge = "";
+    if (u.perfil === "admin") {
+      perfilBadge = `<span style="background: #dbeafe; color: #1e40af; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">Admin</span>`;
+    } else if (u.perfil === "operador") {
+      perfilBadge = `<span style="background: #fef3c7; color: #92400e; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">Operador</span>`;
+    } else {
+      perfilBadge = `<span style="background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">Leitor</span>`;
+    }
+
+    const statusBadge = u.ativo === 1
+      ? `<span style="background: #dcfce7; color: #15803d; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">Ativo</span>`
+      : `<span style="background: #fee2e2; color: #b91c1c; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">Inativo</span>`;
+
+    const isSelf = usuarioLogado && (usuarioLogado.usuario.toLowerCase() === u.usuario.toLowerCase());
+
+    html += `
+      <tr style="border-bottom: 1px solid #f1f5f9;">
+        <td style="padding: 10px 12px; font-weight: 600; color: #0f172a;">${escapeHtml(u.nome)}</td>
+        <td style="padding: 10px 12px; font-family: monospace;">${escapeHtml(u.usuario)}</td>
+        <td style="padding: 10px 12px;">${perfilBadge}</td>
+        <td style="padding: 10px 12px;">${statusBadge}</td>
+        <td style="padding: 10px 12px; text-align: center;">
+          <div style="display: flex; gap: 4px; justify-content: center;">
+            <button class="btn btn-sm btn-outline" style="font-size: 11px; padding: 3px 7px;" onclick="editarUsuario(${u.id})">✏️ Editar</button>
+            ${!isSelf ? `
+              <button class="btn btn-sm btn-outline" style="font-size: 11px; padding: 3px 7px; color: ${u.ativo === 1 ? '#d97706' : '#15803d'};" onclick="alternarAtivoUsuario(${u.id}, ${u.ativo})">
+                ${u.ativo === 1 ? '⏸ Desativar' : '▶ Ativar'}
+              </button>
+              <button class="btn btn-sm btn-outline" style="font-size: 11px; padding: 3px 7px; color: #dc2626;" onclick="excluirUsuario(${u.id})">🗑️</button>
+            ` : '<span style="font-size: 11px; color: #94a3b8; font-style: italic;">(Sua conta)</span>'}
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+
+  tbody.innerHTML = html;
+}
+
+function editarUsuario(id) {
+  const u = usuariosCache.find(x => x.id === id);
+  if (!u) return;
+
+  document.getElementById("formUsuarioId").value = u.id;
+  document.getElementById("formUsuarioNome").value = u.nome;
+  document.getElementById("formUsuarioLogin").value = u.usuario;
+  document.getElementById("formUsuarioLogin").disabled = true; // Login não deve ser alterado após criação
+  document.getElementById("formUsuarioPerfil").value = u.perfil;
+  document.getElementById("formUsuarioSenha").value = "";
+  document.getElementById("formUsuarioSenha").required = false;
+  document.getElementById("formUsuarioSenha").placeholder = "Deixe em branco para manter a senha atual";
+  document.getElementById("lblUsuarioSenha").textContent = "Nova Senha (Opcional)";
+
+  document.getElementById("tituloFormUsuario").textContent = `✏️ Editando Usuário: ${u.usuario}`;
+  document.getElementById("btnSalvarUsuario").textContent = "Atualizar Usuário";
+  document.getElementById("btnCancelarEdicaoUsuario").style.display = "inline-flex";
+}
+
+function cancelarEdicaoUsuario() {
+  document.getElementById("formUsuario").reset();
+  document.getElementById("formUsuarioId").value = "";
+  document.getElementById("formUsuarioLogin").disabled = false;
+  document.getElementById("formUsuarioSenha").required = true;
+  document.getElementById("formUsuarioSenha").placeholder = "Digite uma senha forte...";
+  document.getElementById("lblUsuarioSenha").textContent = "Senha *";
+  document.getElementById("tituloFormUsuario").textContent = "+ Cadastrar Novo Usuário";
+  document.getElementById("btnSalvarUsuario").textContent = "Salvar Usuário";
+  document.getElementById("btnCancelarEdicaoUsuario").style.display = "none";
+}
+
+async function salvarUsuario(e) {
+  e.preventDefault();
+  const id = document.getElementById("formUsuarioId").value;
+  const nome = document.getElementById("formUsuarioNome").value.trim();
+  const usuario = document.getElementById("formUsuarioLogin").value.trim().toLowerCase();
+  const perfil = document.getElementById("formUsuarioPerfil").value;
+  const senha = document.getElementById("formUsuarioSenha").value;
+
+  const method = id ? "PUT" : "POST";
+  const url = id ? `/api/usuarios/${id}` : "/api/usuarios";
+  const payload = { nome, perfil };
+  if (!id) {
+    payload.usuario = usuario;
+    payload.senha = senha;
+  } else {
+    if (senha) payload.senha = senha;
+  }
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (json.success) {
+      exibirToast(id ? "✓ Usuário atualizado com sucesso!" : `✓ Usuário ${usuario} cadastrado!`);
+      cancelarEdicaoUsuario();
+      await carregarUsuarios();
+    } else {
+      alert("Erro: " + json.error);
+    }
+  } catch (err) {
+    alert("Falha de conexão ao salvar usuário.");
+  }
+}
+
+async function alternarAtivoUsuario(id, statusAtual) {
+  const novoStatus = statusAtual === 1 ? 0 : 1;
+  const acaoTexto = novoStatus === 1 ? "ativar" : "desativar";
+  if (!confirm(`Deseja realmente ${acaoTexto} este usuário?`)) return;
+
+  const u = usuariosCache.find(x => x.id === id);
+  if (!u) return;
+
+  try {
+    const res = await fetch(`/api/usuarios/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome: u.nome, perfil: u.perfil, ativo: novoStatus })
+    });
+    const json = await res.json();
+    if (json.success) {
+      exibirToast(`✓ Usuário ${novoStatus === 1 ? 'ativado' : 'desativado'} com sucesso!`);
+      await carregarUsuarios();
+    } else {
+      alert("Erro ao alterar status: " + json.error);
+    }
+  } catch (err) {
+    alert("Falha ao comunicar com o servidor.");
+  }
+}
+
+async function excluirUsuario(id) {
+  const u = usuariosCache.find(x => x.id === id);
+  if (!u) return;
+  if (!confirm(`Tem certeza absoluta que deseja remover o usuário '${u.usuario}'? Essa ação não pode ser desfeita.`)) return;
+
+  try {
+    const res = await fetch(`/api/usuarios/${id}`, { method: "DELETE" });
+    const json = await res.json();
+    if (json.success) {
+      exibirToast(`✓ Usuário ${u.usuario} excluído!`);
+      await carregarUsuarios();
+    } else {
+      alert("Erro ao excluir: " + json.error);
+    }
+  } catch (err) {
+    alert("Falha ao comunicar com o servidor.");
+  }
+}
+
+async function carregarLogsAuditoria() {
+  const tbody = document.getElementById("tabelaAuditoriaCorpo");
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="5" class="loading-cell">Carregando trilha de auditoria...</td></tr>`;
+
+  try {
+    const res = await fetch("/api/auditoria");
+    const json = await res.json();
+    if (json.success) {
+      const logs = json.data || [];
+      if (logs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="loading-cell">Nenhum evento registrado ainda.</td></tr>`;
+        return;
+      }
+
+      let html = "";
+      logs.forEach(l => {
+        let badgeAcao = `<span style="background: #f1f5f9; color: #475569; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 11px;">${escapeHtml(l.acao)}</span>`;
+        if (l.acao.includes("LOGIN_FALHA") || l.acao.includes("EXCLUIR")) {
+          badgeAcao = `<span style="background: #fee2e2; color: #b91c1c; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 11px;">${escapeHtml(l.acao)}</span>`;
+        } else if (l.acao.includes("LOGIN") || l.acao.includes("CRIAR")) {
+          badgeAcao = `<span style="background: #dcfce7; color: #15803d; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 11px;">${escapeHtml(l.acao)}</span>`;
+        } else if (l.acao.includes("EDITAR") || l.acao.includes("SINCRONIZAR")) {
+          badgeAcao = `<span style="background: #e0e7ff; color: #3730a3; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 11px;">${escapeHtml(l.acao)}</span>`;
+        }
+
+        html += `
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 8px 12px; font-family: monospace; color: #64748b; font-size: 11.5px;">${formatarDataHora(l.criado_em)}</td>
+            <td style="padding: 8px 12px; font-weight: 600; color: #0f172a;">${escapeHtml(l.usuario)}</td>
+            <td style="padding: 8px 12px;">${badgeAcao}</td>
+            <td style="padding: 8px 12px; color: #334155;">${escapeHtml(l.detalhes || "-")}</td>
+            <td style="padding: 8px 12px; font-family: monospace; color: #64748b; font-size: 11px;">${escapeHtml(l.ip || "-")}</td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+    } else {
+      tbody.innerHTML = `<tr><td colspan="5" class="loading-cell text-danger">${escapeHtml(json.error)}</td></tr>`;
+    }
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" class="loading-cell text-danger">Erro ao carregar auditoria.</td></tr>`;
+  }
 }
