@@ -1,6 +1,7 @@
 services:
   - type: web
-    name: gestao-processos-sti
+    name: gestao-processos-sti-v3
+    branch: v3.0-homologacao
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt

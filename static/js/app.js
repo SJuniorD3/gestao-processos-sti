@@ -25,6 +25,8 @@ window.fetch = async function(...args) {
 
 let todosProjetos = [];
 let todosProcessos = [];
+let modoVisualizacaoAtual = "tabela";
+let projetosFiltradosCache = [];
 
 document.addEventListener("DOMContentLoaded", () => {
   carregarDados();
@@ -40,10 +42,21 @@ async function carregarDados() {
     if (json.success) {
       todosProjetos = json.data;
       todosProcessos = [];
+      const locaisSet = new Set();
+
       todosProjetos.forEach(pr => {
-        (pr.processos || []).forEach(p => todosProcessos.push(p));
+        (pr.processos || []).forEach(p => {
+          todosProcessos.push(p);
+          if (p.local_atual && p.local_atual.trim()) {
+            locaisSet.add(p.local_atual.trim());
+          }
+        });
       });
+
+      popularSelectLocais(Array.from(locaisSet).sort());
+      projetosFiltradosCache = todosProjetos;
       renderizarTabela(todosProjetos);
+      renderizarTimelineVisual(todosProjetos);
       atualizarKPIs(todosProjetos, todosProcessos);
     }
   } catch (err) {
@@ -51,6 +64,40 @@ async function carregarDados() {
     document.getElementById("tabelaCorpo").innerHTML = `
       <tr><td colspan="12" class="loading-cell text-danger">Erro de conexão ao carregar os projetos.</td></tr>
     `;
+  }
+}
+
+function popularSelectLocais(locais) {
+  const sel = document.getElementById("filtroLocal");
+  if (!sel) return;
+  const valorAtual = sel.value;
+  sel.innerHTML = '<option value="">Todos os Locais</option>';
+  locais.forEach(loc => {
+    const opt = document.createElement("option");
+    opt.value = loc;
+    opt.textContent = loc;
+    if (loc === valorAtual) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+function alternarModoVisualizacao(modo) {
+  modoVisualizacaoAtual = modo;
+  const containerTabela = document.getElementById("containerTabela");
+  const containerTimeline = document.getElementById("containerTimeline");
+  const btnTabela = document.getElementById("btnModoTabela");
+  const btnTimeline = document.getElementById("btnModoTimeline");
+
+  if (modo === "timeline") {
+    containerTabela.style.display = "none";
+    containerTimeline.style.display = "flex";
+    btnTimeline.classList.add("active");
+    btnTabela.classList.remove("active");
+  } else {
+    containerTabela.style.display = "block";
+    containerTimeline.style.display = "none";
+    btnTabela.classList.add("active");
+    btnTimeline.classList.remove("active");
   }
 }
 
@@ -168,6 +215,7 @@ function filtrarTabela() {
   const texto = document.getElementById("filtroTexto").value.toLowerCase().trim();
   const local = document.getElementById("filtroLocal").value;
   const sistema = document.getElementById("filtroSistema").value;
+  const diasFiltro = document.getElementById("filtroDias") ? document.getElementById("filtroDias").value : "";
   const monit = document.getElementById("filtroMonitorar") ? document.getElementById("filtroMonitorar").value : "";
 
   const filtrados = [];
@@ -184,15 +232,22 @@ function filtrarTabela() {
       const matchLocal = !local || p.local_atual === local;
       const matchSistema = !sistema || p.sistema.toUpperCase() === sistema.toUpperCase();
 
+      // Filtro por Faixa de Dias (SLA)
+      let matchDias = true;
+      const dias = typeof p.dias_no_setor === "number" ? p.dias_no_setor : 0;
+      if (diasFiltro === "ate_30") matchDias = dias <= 30;
+      else if (diasFiltro === "31_60") matchDias = dias > 30 && dias <= 60;
+      else if (diasFiltro === "mais_60") matchDias = dias > 60;
+
       const isMonit = p.monitorar === 1 || p.monitorar === undefined;
       let matchMonit = true;
       if (monit === "1") matchMonit = isMonit;
       else if (monit === "0") matchMonit = !isMonit;
 
-      return matchTexto && matchLocal && matchSistema && matchMonit;
+      return matchTexto && matchLocal && matchSistema && matchDias && matchMonit;
     });
 
-    if (procs.length > 0 || (!texto && !local && !sistema && !monit)) {
+    if (procs.length > 0 || (!texto && !local && !sistema && !diasFiltro && !monit)) {
       filtrados.push({
         ...proj,
         processos: procs
@@ -200,7 +255,194 @@ function filtrarTabela() {
     }
   });
 
+  projetosFiltradosCache = filtrados;
   renderizarTabela(filtrados);
+  renderizarTimelineVisual(filtrados);
+}
+
+function limparFiltrosV3() {
+  if (document.getElementById("filtroTexto")) document.getElementById("filtroTexto").value = "";
+  if (document.getElementById("filtroLocal")) document.getElementById("filtroLocal").value = "";
+  if (document.getElementById("filtroSistema")) document.getElementById("filtroSistema").value = "";
+  if (document.getElementById("filtroDias")) document.getElementById("filtroDias").value = "";
+  if (document.getElementById("filtroMonitorar")) document.getElementById("filtroMonitorar").value = "1";
+  filtrarTabela();
+}
+
+function renderizarTimelineVisual(listaProjetos) {
+  const container = document.getElementById("containerTimeline");
+  if (!container) return;
+
+  if (!listaProjetos || listaProjetos.length === 0) {
+    container.innerHTML = `
+      <div style="background: white; padding: 40px; text-align: center; border-radius: 12px; border: 1px dashed #cbd5e1; color: #64748b;">
+        <span style="font-size: 32px; display: block; margin-bottom: 8px;">🔍</span>
+        <strong>Nenhum projeto ou processo encontrado com os filtros selecionados.</strong>
+        <p style="font-size: 12px; margin-top: 4px;">Tente redefinir os filtros para visualizar os dados.</p>
+      </div>
+    `;
+    return;
+  }
+
+  let htmlTotal = "";
+
+  listaProjetos.forEach(proj => {
+    const procs = proj.processos || [];
+    if (procs.length === 0) return;
+
+    htmlTotal += `
+      <div class="project-card">
+        <div class="project-card-header">
+          <div>
+            <div class="project-title">
+              <span>📁 ${escapeHtml(proj.nome)}</span>
+              <span style="background: rgba(255,255,255,0.15); font-size: 11px; padding: 2px 8px; border-radius: 9999px; font-weight: 500;">
+                ${procs.length} processo(s)
+              </span>
+            </div>
+            <div class="project-desc">${escapeHtml(proj.descricao || "Sem descrição cadastrada")}</div>
+          </div>
+          <div>
+            <button class="btn btn-sm btn-outline" onclick="abrirModalNovoProcessoComProjeto('${escapeHtml(proj.nome)}')">
+              ➕ Add Processo
+            </button>
+            <button class="btn btn-sm btn-outline" onclick="abrirModalEditarProjeto(${proj.id})">
+              ✏️ Editar
+            </button>
+          </div>
+        </div>
+        <div>
+    `;
+
+    procs.forEach(p => {
+      const dias = p.dias_no_setor !== null ? p.dias_no_setor : "-";
+      let badgeSla = "";
+      if (typeof dias === "number") {
+        if (dias > 60) {
+          badgeSla = `<span class="badge-sla-critico">⚠️ ${dias} dias no setor (Crítico)</span>`;
+        } else if (dias > 30) {
+          badgeSla = `<span class="badge-sla-atencao">⏳ ${dias} dias no setor (Atenção)</span>`;
+        } else {
+          badgeSla = `<span class="badge-sla-ok">✓ ${dias} dias no setor</span>`;
+        }
+      } else {
+        badgeSla = `<span class="badge-sla-ok">- dias</span>`;
+      }
+
+      const tagSistema = (p.sistema && p.sistema.toUpperCase().includes("STARTGOV"))
+        ? `<span class="badge-tag-start">STARTGOV</span>`
+        : `<span class="badge-tag-sei">SEI</span>`;
+
+      // Monta os andamentos da Timeline
+      const ultimos = p.ultimos_4_status || [];
+      let timelineItemsHtml = "";
+
+      if (ultimos.length > 0) {
+        ultimos.forEach((st, sIdx) => {
+          const isAtual = sIdx === 0;
+          const bulletCls = isAtual ? "timeline-bullet current" : "timeline-bullet";
+          const contentCls = isAtual ? "timeline-content current" : "timeline-content";
+          const dataFormatada = st.data_movimentacao || formatarData(st.data_registro) || "-";
+          const icone = isAtual ? "📍" : (sIdx === 1 ? "⚡" : "📄");
+
+          timelineItemsHtml += `
+            <div class="timeline-item">
+              <div class="${bulletCls}">${icone}</div>
+              <div class="${contentCls}">
+                <div class="timeline-content-header">
+                  <div>
+                    <strong style="color: ${isAtual ? '#1e3a8a' : '#1e293b'}; font-weight: 700;">
+                      ${escapeHtml(st.local || p.local_atual || "-")}
+                    </strong>
+                    ${isAtual ? '<span style="background: #2563eb; color: white; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; margin-left: 6px; text-transform: uppercase;">Posição Atual</span>' : ''}
+                  </div>
+                  <span style="font-family: monospace; color: #64748b; font-size: 11px;">
+                    ${escapeHtml(dataFormatada)}
+                  </span>
+                </div>
+                <div style="color: #334155; line-height: 1.4;">
+                  ${escapeHtml(st.situacao || p.situacao || "-")}
+                  ${st.acao ? ` <span style="color: #64748b;">(Ação: ${escapeHtml(st.acao)})</span>` : ''}
+                </div>
+              </div>
+            </div>
+          `;
+        });
+      } else {
+        timelineItemsHtml = `
+          <div class="timeline-item">
+            <div class="timeline-bullet current">📍</div>
+            <div class="timeline-content current">
+              <div class="timeline-content-header">
+                <div>
+                  <strong style="color: #1e3a8a; font-weight: 700;">${escapeHtml(p.local_atual || "-")}</strong>
+                  <span style="background: #2563eb; color: white; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; margin-left: 6px; text-transform: uppercase;">Posição Atual</span>
+                </div>
+                <span style="font-family: monospace; color: #64748b; font-size: 11px;">${formatarData(p.data_recebimento)}</span>
+              </div>
+              <div style="color: #334155;">${escapeHtml(p.situacao || "Em tramitação")} - ${escapeHtml(p.acao || "")}</div>
+            </div>
+          </div>
+        `;
+      }
+
+      htmlTotal += `
+        <div class="process-card-item">
+          <div class="process-header-bar">
+            <div class="process-identifier">
+              ${tagSistema}
+              <a href="javascript:void(0)" onclick="abrirProcessoExterno('${escapeHtml(p.sistema)}', '${escapeHtml(p.numero_processo)}')"
+                 style="font-family: monospace; font-weight: 700; font-size: 14px; color: #1d4ed8; text-decoration: underline;"
+                 title="Clique para abrir diretamente no portal oficial">
+                🔗 ${escapeHtml(p.numero_processo)}
+              </a>
+              <button class="btn btn-sm btn-secondary" style="padding: 2px 6px; font-size: 11px;" title="Copiar número" onclick="copiarNumeroProcesso('${escapeHtml(p.numero_processo)}')">
+                📋 Copiar
+              </button>
+              <span style="color: #cbd5e1;">•</span>
+              <span style="font-size: 13px; color: #475569;">
+                Setor Atual: <strong style="color: #0f172a;">${escapeHtml(p.local_atual || "-")}</strong>
+              </span>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 8px;">
+              ${badgeSla}
+              <button class="btn-icon-action" title="Sincronizar no portal" onclick="sincronizarProcessoWeb(${p.id})">🔄</button>
+              <button class="btn-icon-action" title="Editar processo" onclick="abrirModalEditarProcesso(${p.id})">✏️</button>
+              <button class="btn-icon-action" title="Excluir processo" onclick="confirmarExclusao(${p.id}, '${escapeHtml(p.numero_processo)}')">🗑️</button>
+            </div>
+          </div>
+
+          <!-- LINHA DO TEMPO VISUAL -->
+          <div class="timeline-track">
+            <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 2px; display: flex; align-items: center; gap: 4px;">
+              <span>⏱️ Trilha de Tramitação do Processo</span>
+            </div>
+            ${timelineItemsHtml}
+          </div>
+        </div>
+      `;
+    });
+
+    htmlTotal += `
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = htmlTotal;
+}
+
+function copiarNumeroProcesso(num) {
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(num).then(() => {
+      alert(`Número ${num} copiado para a área de transferência!`);
+    }).catch(() => {
+      alert(`Processo: ${num}`);
+    });
+  } else {
+    alert(`Processo: ${num}`);
+  }
 }
 
 function abrirModalNovoProcessoComProjeto(nomeProj) {

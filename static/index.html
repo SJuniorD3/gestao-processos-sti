@@ -17,8 +17,11 @@
       <div class="brand">
         <div class="brand-badge">STI</div>
         <div class="brand-text">
-          <h1>Superintendência de Tecnologia da Informação</h1>
-          <p>Painel de Rastreamento de Processos e Automação de Resumos</p>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <h1>Superintendência de Tecnologia da Informação</h1>
+            <span class="badge-env-homolog">🛠️ v3.0 • Homologação</span>
+          </div>
+          <p>Painel de Rastreamento de Processos • Ambiente de Desenvolvimento e Testes</p>
         </div>
       </div>
 
@@ -95,7 +98,7 @@
       </div>
     </section>
 
-    <!-- BARRA DE FERRAMENTAS E FILTROS -->
+    <!-- BARRA DE FERRAMENTAS E FILTROS COMBINADOS V3.0 -->
     <section class="toolbar">
       <div class="search-box">
         <span class="search-icon">🔍</span>
@@ -104,20 +107,38 @@
       <div class="filter-group">
         <select id="filtroLocal" onchange="filtrarTabela()">
           <option value="">Todos os Locais</option>
-          <option value="STI/SEDUC">STI/SEDUC</option>
-          <option value="SAOFC/SEDUC">SAOFC/SEDUC</option>
-          <option value="SUMES">SUMES</option>
         </select>
         <select id="filtroSistema" onchange="filtrarTabela()">
           <option value="">Todos os Sistemas</option>
           <option value="SEI">SEI</option>
           <option value="STARTGOV">STARTGOV</option>
         </select>
+        <select id="filtroDias" onchange="filtrarTabela()">
+          <option value="">Tempo: Todos</option>
+          <option value="ate_30">Normal (≤ 30 dias)</option>
+          <option value="31_60">Atenção (31 a 60 dias)</option>
+          <option value="mais_60">⚠️ Crítico (> 60 dias)</option>
+        </select>
         <select id="filtroMonitorar" onchange="filtrarTabela()">
           <option value="1" selected>Somente Monitorados</option>
           <option value="">Todos os Processos</option>
           <option value="0">Não Monitorados</option>
         </select>
+
+        <button class="btn btn-secondary" style="font-size: 11px; padding: 6px 10px;" onclick="limparFiltrosV3()" title="Redefinir todos os filtros">
+          Limpar
+        </button>
+
+        <!-- SELETOR DE MODO DE EXIBIÇÃO (UX V3.0) -->
+        <div class="view-switcher">
+          <button id="btnModoTabela" class="view-btn active" onclick="alternarModoVisualizacao('tabela')">
+            📄 Tabela
+          </button>
+          <button id="btnModoTimeline" class="view-btn" onclick="alternarModoVisualizacao('timeline')">
+            ⏱️ Linha do Tempo
+          </button>
+        </div>
+
         <button class="btn btn-secondary" onclick="exportarCSV()">
           <span class="icon">📥</span> Exportar Excel
         </button>
@@ -127,8 +148,8 @@
       </div>
     </section>
 
-    <!-- TABELA FIEL À PLANILHA DE CONTROLE -->
-    <section class="table-container">
+    <!-- VISÃO 1: TABELA SINTÉTICA (MODO CLÁSSICO) -->
+    <section class="table-container" id="containerTabela">
       <table class="sti-table" id="tabelaProcessos">
         <thead>
           <tr>
@@ -148,10 +169,15 @@
         </thead>
         <tbody id="tabelaCorpo">
           <tr>
-            <td colspan="11" class="loading-cell">Carregando processos da STI...</td>
+            <td colspan="12" class="loading-cell">Carregando processos da STI...</td>
           </tr>
         </tbody>
       </table>
+    </section>
+
+    <!-- VISÃO 2: LINHA DO TEMPO VISUAL (MODO V3.0) -->
+    <section class="timeline-view-container" id="containerTimeline" style="display: none;">
+      <!-- Cards com timelines gerados dinamicamente via app.js -->
     </section>
 
     <!-- SEÇÃO DE AUDITORIA E LOG DE DISPAROS -->
