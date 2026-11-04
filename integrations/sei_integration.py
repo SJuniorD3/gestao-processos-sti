@@ -75,7 +75,7 @@ class SEIIntegration:
         session = self._obter_sessao()
         try:
             # 1. Carrega página inicial do login SIP
-            resp_login = session.get(self.login_url, timeout=12)
+            resp_login = session.get(self.login_url, timeout=20)
             if resp_login.status_code != 200:
                 return False, f"Falha ao carregar tela de login do SEI (HTTP {resp_login.status_code})"
 
@@ -123,9 +123,9 @@ class SEIIntegration:
             self.is_authenticated = False
             err_str = str(e)
             if "Network is unreachable" in err_str or "101" in err_str:
-                return False, "Rede estadual inacessível ao portal SEI (sip.sei.ma.gov.br). O firewall governamental pode estar restringindo conexões externas da nuvem."
+                return False, "Rede estadual inacessível ao portal SEI (sip.sei.ma.gov.br). O firewall governamental restringe conexões de datacenters no exterior."
             elif "timed out" in err_str.lower():
-                return False, "Tempo limite esgotado ao conectar ao portal do SEI (sip.sei.ma.gov.br)."
+                return False, "Tempo limite esgotado ao conectar ao portal do SEI (sip.sei.ma.gov.br). O firewall estadual da ATI-MA bloqueia tráfego vindo de servidores fora do Brasil."
             return False, f"Erro de conexão com o SEI: {err_str}"
         except Exception as e:
             self.is_authenticated = False

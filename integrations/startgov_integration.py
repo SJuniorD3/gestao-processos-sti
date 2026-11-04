@@ -107,14 +107,20 @@ class StartGovIntegration:
 
         session = self._obter_sessao()
         url_auth = f"{self.api_base}/auth/login"
+        
+        # Garante envio do CPF limpo (apenas dígitos) ou formatado caso a API exija
+        cpf_puro = re.sub(r"[^\d]", "", str(self.username).strip())
+        cpf_envio = cpf_puro if len(cpf_puro) == 11 else str(self.username).strip()
+
         payload = {
-            "cpf": self.username,
-            "password": self.password
+            "cpf": cpf_envio,
+            "password": str(self.password).strip()
         }
         headers = {
+            "Accept": "application/json, text/plain, */*",
             "Content-Type": "application/json",
             "Origin": "https://bid.startgov.com.br",
-            "Referer": self.login_url
+            "Referer": "https://bid.startgov.com.br/"
         }
 
         try:
@@ -128,7 +134,30 @@ class StartGovIntegration:
                     return True, "Autenticado com sucesso no STARTGOV"
                 return False, "Token de autenticação não retornado pelo STARTGOV."
             elif resp.status_code in (401, 422):
-                return False, "Credenciais inválidas no STARTGOV (CPF ou senha incorretos)."
+                msg = "Credenciais inválidas no STARTGOV (CPF ou senha incorretos)."
+                try:
+                    res_j = resp.json()
+                    if res_j.get("message"):
+                        msg = f"STARTGOV: {res_j.get('message')}"
+                    elif res_j.get("error"):
+                        msg = f"STARTGOV: {res_j.get('error')}"
+                except Exception:
+                    pass
+                return False, msg
+            elif resp.status_code == 403:
+                msg = "Acesso negado no STARTGOV (HTTP 403)."
+                try:
+                    res_j = resp.json()
+                    if res_j.get("message"):
+                        msg = f"STARTGOV (403): {res_j.get('message')}"
+                    elif res_j.get("error"):
+                        msg = f"STARTGOV (403): {res_j.get('error')}"
+                except Exception:
+                    if "cloudflare" in resp.text.lower():
+                        msg = "STARTGOV (403): Bloqueio do WAF/Cloudflare contra servidores de nuvem. O portal rejeita chamadas de fora do Brasil."
+                    else:
+                        msg = f"STARTGOV (403): Acesso negado pelo servidor remoto ({resp.text[:100].strip()})"
+                return False, msg
             else:
                 return False, f"Falha de autenticação no STARTGOV (HTTP {resp.status_code})"
         except requests.exceptions.RequestException as e:
