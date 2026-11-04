@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Acesso Restrito - STI | Gestão de Processos</title>
-  <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/style.css?v=3.0.3">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -122,6 +122,27 @@
       color: #64748b;
       border-top: 1px solid #f1f5f9;
       background: #fafbfc;
+    }
+    @media (max-width: 480px) {
+      body {
+        padding: 12px;
+      }
+      .login-container {
+        border-radius: 12px;
+      }
+      .login-header {
+        padding: 24px 16px 20px;
+      }
+      .login-header h1 {
+        font-size: 17px;
+      }
+      .login-body {
+        padding: 24px 18px;
+      }
+      .btn-submit {
+        min-height: 44px;
+        font-size: 15px;
+      }
     }
   </style>
 </head>
