@@ -13,6 +13,7 @@ import base64
 
 from config import PORT, HOST, BASE_DIR, ADMIN_USER, ADMIN_PASS
 from database import (
+    init_db,
     listar_processos, listar_projetos_com_processos, obter_processo, criar_processo, atualizar_processo,
     excluir_processo, obter_projeto, obter_ou_criar_projeto, atualizar_projeto, excluir_projeto, listar_ultimos_relatorios,
     formatar_data_br, formatar_data_hora_br,
@@ -25,6 +26,12 @@ from scheduler import scheduler
 from notifier import gerar_conteudo_resumo, gerar_relatorio_executivo_formal_html
 from monitor_engine import executar_monitoramento_processos, monitorar_processo_individual
 from integrations import sei_client, startgov_client
+
+# Garante que todas as tabelas e migrações existam no banco de dados (SQLite ou Supabase/PostgreSQL)
+try:
+    init_db()
+except Exception as _e_init:
+    print(f"[!] Aviso ao inicializar schema do banco: {_e_init}")
 
 STATIC_DIR = BASE_DIR / "static"
 SECRET_KEY = os.environ.get("SECRET_KEY", "sti_session_secret_token_2026_salt")
