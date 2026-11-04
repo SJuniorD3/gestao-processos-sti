@@ -17,10 +17,11 @@ from database import (
     excluir_processo, obter_projeto, obter_ou_criar_projeto, atualizar_projeto, excluir_projeto, listar_ultimos_relatorios,
     formatar_data_br, formatar_data_hora_br,
     obter_usuario_por_login, obter_usuario_por_id, listar_usuarios, criar_usuario, atualizar_usuario, excluir_usuario,
-    registrar_auditoria, listar_auditoria, verificar_senha
+    registrar_auditoria, listar_auditoria, verificar_senha,
+    obter_processo_por_numero, obter_metricas_gargalos
 )
 from scheduler import scheduler
-from notifier import gerar_conteudo_resumo
+from notifier import gerar_conteudo_resumo, gerar_relatorio_executivo_formal_html
 from monitor_engine import executar_monitoramento_processos, monitorar_processo_individual
 from integrations import sei_client, startgov_client
 
@@ -232,6 +233,21 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json({"success": True, "data": resumo})
             return
 
+        # Rota da API / Página: Relatório Executivo Formal para Impressão / Salvar PDF (A4)
+        if path == "/relatorio-executivo":
+            curr = self._get_current_user()
+            user_nome = (curr.get("nome") or curr.get("usuario") or "STI") if curr else "STI"
+            html_exec = gerar_relatorio_executivo_formal_html(usuario=user_nome)
+            self._send_html(html_exec)
+            return
+
+        if path == "/api/relatorios/executivo":
+            curr = self._get_current_user()
+            user_nome = (curr.get("nome") or curr.get("usuario") or "STI") if curr else "STI"
+            html_exec = gerar_relatorio_executivo_formal_html(usuario=user_nome)
+            self._send_json({"success": True, "html": html_exec})
+            return
+
         # Rota da API: Informações do Usuário Atual
         if path == "/api/auth/me":
             curr = self._get_current_user()
@@ -269,6 +285,12 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                     "startgov": startgov_client.get_info()
                 }
             })
+            return
+
+        # Rota da API: Métricas de Gargalos e Produtividade (SLA)
+        if path == "/api/metricas/gargalos":
+            gargalos = obter_metricas_gargalos()
+            self._send_json({"success": True, "data": gargalos})
             return
 
         # Exportar CSV para Excel
@@ -449,6 +471,105 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json({"success": True, "id": novo_id, "message": "Processo cadastrado com sucesso!"}, 201)
             except Exception as e:
                 self._send_json({"success": False, "error": f"Erro ao cadastrar: {str(e)}"}, 400)
+            return
+
+        # Importação em Lote via Planilha / CSV
+        if path == "/api/processos/importar-lote":
+            curr = self._require_role("admin", "operador")
+            if not curr:
+                return
+            try:
+                dados = self._read_json()
+                registros = dados.get("registros", [])
+
+                # Se veio como texto CSV bruto, faz o parse
+                if not registros and "csv_texto" in dados:
+                    csv_raw = dados["csv_texto"]
+                    delimitador = ";" if ";" in csv_raw else ("," if "," in csv_raw else "\t")
+                    reader = csv.reader(io.StringIO(csv_raw), delimiter=delimitador)
+                    linhas = list(reader)
+                    if linhas:
+                        cabecalho = [str(c).strip().lower() for c in linhas[0]]
+                        
+                        def idx(nomes_possiveis, padrao=-1):
+                            for n in nomes_possiveis:
+                                if n in cabecalho:
+                                    return cabecalho.index(n)
+                            return padrao
+
+                        i_proj = idx(["projeto", "nome do projeto", "proj"], 0)
+                        i_sis = idx(["sistema", "tipo", "origem"], 1)
+                        i_num = idx(["numero_processo", "processo", "nº processo", "nº - processo", "numero", "nº"], 2)
+                        i_desc = idx(["descricao", "descrição", "objeto", "objeto/descrição"], 3)
+                        i_local = idx(["local_atual", "local", "setor", "unidade"], 4)
+                        i_acao = idx(["acao", "ação"], 5)
+                        i_data = idx(["data_recebimento", "data", "recebimento", "dt_recebimento"], 6)
+                        i_sit = idx(["situacao", "situação", "status"], 7)
+
+                        for l in linhas[1:]:
+                            if not l or not any(l):
+                                continue
+                            def col(i, def_val=""):
+                                return l[i].strip() if 0 <= i < len(l) else def_val
+
+                            num_proc = col(i_num)
+                            if not num_proc:
+                                continue
+                            
+                            registros.append({
+                                "projeto": col(i_proj, "STI"),
+                                "sistema": col(i_sis, "SEI"),
+                                "numero_processo": num_proc,
+                                "descricao": col(i_desc, ""),
+                                "local_atual": col(i_local, "Aguardando Monitoramento"),
+                                "acao": col(i_acao, "Aguardando trâmite"),
+                                "data_recebimento": col(i_data, ""),
+                                "situacao": col(i_sit, "Em tramitação"),
+                                "monitorar": 1
+                            })
+
+                if not registros:
+                    self._send_json({"success": False, "error": "Nenhum registro válido encontrado para importação."}, 400)
+                    return
+
+                criados = 0
+                atualizados = 0
+                erros = []
+
+                for idx_item, item in enumerate(registros, 1):
+                    num = str(item.get("numero_processo", "")).strip()
+                    if not num:
+                        erros.append(f"Linha {idx_item}: Número do processo ausente.")
+                        continue
+                    try:
+                        existente = obter_processo_por_numero(num)
+                        if existente:
+                            atualizar_processo(existente["id"], item, registrar_novo_status=True)
+                            atualizados += 1
+                        else:
+                            criar_processo(item)
+                            criados += 1
+                    except Exception as ex_item:
+                        erros.append(f"Linha {idx_item} ({num}): {str(ex_item)}")
+
+                resumo_msg = f"Importação em lote concluída: {criados} novos criados, {atualizados} atualizados."
+                registrar_auditoria(
+                    curr["usuario"],
+                    "IMPORTACAO_LOTE",
+                    f"{resumo_msg} (Total processado: {len(registros)}, Erros: {len(erros)})",
+                    self._get_client_ip()
+                )
+
+                self._send_json({
+                    "success": True,
+                    "message": resumo_msg,
+                    "criados": criados,
+                    "atualizados": atualizados,
+                    "total_processados": len(registros),
+                    "erros": erros
+                })
+            except Exception as e:
+                self._send_json({"success": False, "error": f"Falha na importação em lote: {str(e)}"}, 500)
             return
 
         # Disparo Manual do Relatório

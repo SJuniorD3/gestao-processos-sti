@@ -923,3 +923,119 @@ def listar_ultimos_relatorios(limit=10):
             LIMIT ?
         """, (limit,))
         return [dict(r) for r in cursor.fetchall()]
+
+def obter_processo_por_numero(numero_processo):
+    """Busca um processo pelo número (comparação ignorando espaços)."""
+    if not numero_processo:
+        return None
+    num_limpo = str(numero_processo).strip()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, projeto_id, sistema, numero_processo FROM processos WHERE TRIM(numero_processo) = ? LIMIT 1", (num_limpo,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def obter_metricas_gargalos():
+    """
+    Calcula e retorna indicadores de gargalo operacional e cumprimento de SLA:
+    - Faixas de atraso (<=15d, 16-30d, 31-60d, >60d)
+    - Agrupamento por setor com tempo médio e máximo de retenção
+    - Top processos que exigem atenção urgente
+    """
+    processos = listar_processos()
+    
+    total = len(processos)
+    soma_dias = 0
+    cont_com_dias = 0
+    
+    faixas = {
+        "ate_15_dias": 0,
+        "de_16_a_30": 0,
+        "de_31_a_60": 0,
+        "mais_de_60": 0
+    }
+    
+    setores_map = {}
+    sistemas_map = {}
+    lista_com_dias = []
+    
+    for p in processos:
+        dias = p.get("dias_no_setor")
+        sis = p.get("sistema") or "SEI"
+        sistemas_map[sis] = sistemas_map.get(sis, 0) + 1
+        
+        setor = (p.get("local_atual") or "Não informado").strip()
+        if setor not in setores_map:
+            setores_map[setor] = {
+                "setor": setor,
+                "total": 0,
+                "soma_dias": 0,
+                "max_dias": 0,
+                "processos": []
+            }
+        
+        setores_map[setor]["total"] += 1
+        
+        if dias is not None and isinstance(dias, (int, float)):
+            soma_dias += dias
+            cont_com_dias += 1
+            lista_com_dias.append(p)
+            
+            if dias <= 15:
+                faixas["ate_15_dias"] += 1
+            elif dias <= 30:
+                faixas["de_16_a_30"] += 1
+            elif dias <= 60:
+                faixas["de_31_a_60"] += 1
+            else:
+                faixas["mais_de_60"] += 1
+                
+            setores_map[setor]["soma_dias"] += dias
+            if dias > setores_map[setor]["max_dias"]:
+                setores_map[setor]["max_dias"] = dias
+                
+        setores_map[setor]["processos"].append({
+            "id": p["id"],
+            "numero_processo": p["numero_processo"],
+            "projeto": p["projeto"],
+            "dias_no_setor": dias,
+            "situacao": p.get("situacao", "")
+        })
+
+    # Calcula médias por setor
+    lista_setores = []
+    for s_info in setores_map.values():
+        total_s = s_info["total"]
+        s_info["media_dias"] = round(s_info["soma_dias"] / total_s, 1) if total_s > 0 else 0
+        lista_setores.append(s_info)
+        
+    # Ordena setores por total de processos decrescente e média de dias
+    lista_setores.sort(key=lambda x: (x["total"], x["media_dias"]), reverse=True)
+    
+    # Top 10 mais parados
+    top_atrasados = sorted(
+        [p for p in lista_com_dias if p.get("dias_no_setor") is not None],
+        key=lambda x: x["dias_no_setor"],
+        reverse=True
+    )[:10]
+
+    media_geral = round(soma_dias / cont_com_dias, 1) if cont_com_dias > 0 else 0
+
+    return {
+        "total_processos": total,
+        "media_dias_geral": media_geral,
+        "faixas_sla": faixas,
+        "por_setor": lista_setores,
+        "por_sistema": sistemas_map,
+        "top_atrasados": [
+            {
+                "id": p["id"],
+                "numero_processo": p["numero_processo"],
+                "projeto": p["projeto"],
+                "local_atual": p["local_atual"],
+                "dias_no_setor": p["dias_no_setor"],
+                "situacao": p["situacao"]
+            }
+            for p in top_atrasados
+        ]
+    }

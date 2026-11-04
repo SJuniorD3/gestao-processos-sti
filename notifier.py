@@ -288,3 +288,376 @@ def executar_envio_resumo(tipo="Agendado"):
         "total": resumo["total"],
         "data_formatada": resumo["data_formatada"]
     }
+
+def gerar_relatorio_executivo_formal_html(usuario="STI"):
+    """Gera um documento HTML completo, timbrado e formatado para impressão executiva A4 / PDF."""
+    projetos = listar_projetos_com_processos(apenas_monitorados=True)
+    agora = datetime.datetime.now()
+    data_formatada = agora.strftime("%d/%m/%Y às %H:%M:%S")
+
+    todos_processos = []
+    for p in projetos:
+        todos_processos.extend(p.get("processos", []))
+
+    total = len(todos_processos)
+    na_sti = sum(1 for proc in todos_processos if "STI" in (proc.get("local_atual") or "").upper())
+    fora_sti = total - na_sti
+    criticos = sum(1 for proc in todos_processos if (proc.get("dias_no_setor") or 0) > 60)
+    alerta_medio = sum(1 for proc in todos_processos if 15 < (proc.get("dias_no_setor") or 0) <= 60)
+    no_prazo = sum(1 for proc in todos_processos if (proc.get("dias_no_setor") or 0) <= 15)
+
+    linhas_html = []
+    for idx_proj, proj in enumerate(projetos, 1):
+        procs = proj.get("processos", [])
+        if not procs:
+            continue
+
+        linhas_html.append(f"""
+        <div class="projeto-bloco">
+          <div class="projeto-header">
+            <h3>{idx_proj}. {proj['nome']}</h3>
+            {f'<p class="projeto-desc"><strong>Objeto:</strong> {proj["descricao"]}</p>' if proj.get("descricao") else ''}
+          </div>
+          <table class="tabela-executiva">
+            <thead>
+              <tr>
+                <th style="width: 14%;">Sistema / Nº</th>
+                <th style="width: 24%;">Local Atual</th>
+                <th style="width: 14%;">Data Entrada</th>
+                <th style="width: 12%;">Dias no Setor</th>
+                <th style="width: 36%;">Último Andamento / Situação</th>
+              </tr>
+            </thead>
+            <tbody>
+        """)
+
+        for p in procs:
+            dias = p.get("dias_no_setor")
+            dias_txt = f"{dias} dias" if dias is not None else "-"
+            cor_badge = "#16a34a" if (dias or 0) <= 15 else ("#ca8a04" if (dias or 0) <= 60 else "#dc2626")
+            bg_badge = "#dcfce7" if (dias or 0) <= 15 else ("#fef9c3" if (dias or 0) <= 60 else "#fee2e2")
+
+            ult_status = p.get("ultimos_4_status", [])
+            ult_texto = "-"
+            if ult_status:
+                s0 = ult_status[0]
+                dt_mov = s0.get("data_movimentacao") or s0.get("data_registro") or ""
+                ult_texto = f"<strong>[{dt_mov}]</strong> {s0.get('situacao', '-')}"
+            elif p.get("situacao"):
+                ult_texto = p.get("situacao")
+
+            linhas_html.append(f"""
+              <tr>
+                <td>
+                  <span class="badge-sis badge-{p.get('sistema', 'sei').lower()}">{p.get('sistema')}</span><br>
+                  <strong style="font-family: monospace; font-size: 11px;">{p.get('numero_processo')}</strong>
+                </td>
+                <td><strong>{p.get('local_atual') or '-'}</strong></td>
+                <td>{formatar_data_br(p.get('data_recebimento'))}</td>
+                <td>
+                  <span class="badge-sla" style="background: {bg_badge}; color: {cor_badge};">
+                    {dias_txt}
+                  </span>
+                </td>
+                <td style="font-size: 11px; line-height: 1.4;">{ult_texto}</td>
+              </tr>
+            """)
+
+        linhas_html.append("""
+            </tbody>
+          </table>
+        </div>
+        """)
+
+    conteudo_tabelas = "".join(linhas_html)
+
+    return f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Relatório Executivo de Processos - SEDUC / STI</title>
+  <style>
+    @page {{
+      size: A4 portrait;
+      margin: 12mm 15mm 15mm 15mm;
+    }}
+    * {{
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    }}
+    body {{
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 20px;
+      font-size: 12px;
+    }}
+    .no-print-bar {{
+      max-width: 900px;
+      margin: 0 auto 20px auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #ffffff;
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+      border: 1px solid #e2e8f0;
+    }}
+    .btn {{
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+    }}
+    .btn-print {{
+      background: #2563eb;
+      color: white;
+    }}
+    .btn-back {{
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+    }}
+    .btn-print:hover {{ background: #1d4ed8; }}
+    .btn-back:hover {{ background: #e2e8f0; }}
+
+    .documento-folha {{
+      max-width: 900px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 32px 36px;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      border: 1px solid #e2e8f0;
+    }}
+    .cabecalho-institucional {{
+      text-align: center;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 16px;
+      margin-bottom: 20px;
+    }}
+    .cabecalho-institucional h1 {{
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: #1e293b;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }}
+    .cabecalho-institucional h2 {{
+      font-size: 13px;
+      font-weight: 700;
+      color: #334155;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }}
+    .cabecalho-institucional h3 {{
+      font-size: 12px;
+      font-weight: 600;
+      color: #2563eb;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }}
+    .titulo-relatorio {{
+      font-size: 17px;
+      font-weight: 800;
+      color: #0f172a;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      background: #f8fafc;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid #e2e8f0;
+      display: inline-block;
+    }}
+    .meta-emissao {{
+      margin-top: 10px;
+      font-size: 11px;
+      color: #64748b;
+    }}
+
+    .kpi-resumo-grid {{
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin-bottom: 24px;
+    }}
+    .kpi-card {{
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 10px;
+      text-align: center;
+    }}
+    .kpi-card .valor {{
+      font-size: 20px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 2px;
+    }}
+    .kpi-card .rotulo {{
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #64748b;
+    }}
+
+    .projeto-bloco {{
+      margin-bottom: 24px;
+      page-break-inside: avoid;
+    }}
+    .projeto-header {{
+      background: #f1f5f9;
+      border-left: 4px solid #2563eb;
+      padding: 8px 12px;
+      margin-bottom: 8px;
+      border-radius: 0 4px 4px 0;
+    }}
+    .projeto-header h3 {{
+      font-size: 13px;
+      font-weight: 800;
+      color: #0f172a;
+    }}
+    .projeto-desc {{
+      font-size: 11px;
+      color: #475569;
+      margin-top: 2px;
+    }}
+
+    .tabela-executiva {{
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11.5px;
+      margin-bottom: 8px;
+    }}
+    .tabela-executiva th {{
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      padding: 6px 8px;
+      text-align: left;
+      font-weight: 700;
+      color: #334155;
+      font-size: 10.5px;
+      text-transform: uppercase;
+    }}
+    .tabela-executiva td {{
+      border: 1px solid #e2e8f0;
+      padding: 6px 8px;
+      vertical-align: middle;
+    }}
+    .tabela-executiva tr:nth-child(even) {{
+      background: #fafafa;
+    }}
+
+    .badge-sis {{
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 4px;
+      display: inline-block;
+      margin-bottom: 2px;
+    }}
+    .badge-sei {{ background: #fef08a; color: #854d0e; }}
+    .badge-startgov {{ background: #dbeafe; color: #1e40af; }}
+
+    .badge-sla {{
+      font-weight: 700;
+      font-size: 10.5px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      display: inline-block;
+      white-space: nowrap;
+    }}
+
+    .rodape-documento {{
+      border-top: 1px solid #cbd5e1;
+      padding-top: 12px;
+      margin-top: 24px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #64748b;
+    }}
+
+    @media print {{
+      body {{
+        background: transparent !important;
+        padding: 0 !important;
+      }}
+      .no-print-bar {{
+        display: none !important;
+      }}
+      .documento-folha {{
+        box-shadow: none !important;
+        border: none !important;
+        padding: 0 !important;
+        max-width: 100% !important;
+      }}
+      .projeto-bloco {{
+        page-break-inside: avoid;
+      }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="no-print-bar">
+    <div>
+      <a href="/" class="btn btn-back">← Voltar ao Sistema</a>
+    </div>
+    <div style="display: flex; gap: 8px;">
+      <button onclick="window.print()" class="btn btn-print">🖨️ Imprimir / Salvar PDF (A4)</button>
+    </div>
+  </div>
+
+  <div class="documento-folha">
+    <div class="cabecalho-institucional">
+      <h1>Governo do Estado</h1>
+      <h2>Secretaria de Estado da Educação &bull; SEDUC</h2>
+      <h3>Superintendência de Tecnologia da Informação &bull; STI</h3>
+      <div class="titulo-relatorio">Relatório Executivo de Tramitação & SLA</div>
+      <div class="meta-emissao">
+        Documento Oficial Gerado em <strong>{data_formatada}</strong> &bull; Emissor: <strong>{usuario}</strong>
+      </div>
+    </div>
+
+    <div class="kpi-resumo-grid">
+      <div class="kpi-card">
+        <div class="valor">{total}</div>
+        <div class="rotulo">Total Processos</div>
+      </div>
+      <div class="kpi-card">
+        <div class="valor" style="color: #2563eb;">{na_sti}</div>
+        <div class="rotulo">No Setor STI</div>
+      </div>
+      <div class="kpi-card">
+        <div class="valor" style="color: #475569;">{fora_sti}</div>
+        <div class="rotulo">Em Outros Setores</div>
+      </div>
+      <div class="kpi-card">
+        <div class="valor" style="color: #ca8a04;">{alerta_medio}</div>
+        <div class="rotulo">Atenção (16-60d)</div>
+      </div>
+      <div class="kpi-card">
+        <div class="valor" style="color: #dc2626;">{criticos}</div>
+        <div class="rotulo">Crítico (&gt; 60d)</div>
+      </div>
+    </div>
+
+    {conteudo_tabelas}
+
+    <div class="rodape-documento">
+      <div>Superintendência de Tecnologia da Informação &bull; SEDUC</div>
+      <div>Sistema de Monitoramento SEI &amp; STARTGOV &bull; Página 1</div>
+    </div>
+  </div>
+</body>
+</html>"""
+

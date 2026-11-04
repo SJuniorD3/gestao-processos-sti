@@ -1194,3 +1194,81 @@ body {
     grid-column: span 1;
   }
 }
+
+/* ==========================================================================
+   ESTILOS ADICIONAIS: IMPORTAÇÃO EM LOTE, GARGALOS & IMPRESSÃO EXECUTIVA
+   ========================================================================== */
+#dropzoneCSV:hover, #dropzoneCSV.dragover {
+  border-color: #2563eb !important;
+  background-color: #eff6ff !important;
+}
+
+.gargalo-setor-item {
+  padding: 8px 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+.gargalo-setor-item:hover {
+  border-color: #cbd5e1;
+  background: #ffffff;
+}
+
+.gargalo-top-item {
+  padding: 8px 12px;
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* REGRA DE IMPRESSÃO A4 PROFISSIONAL */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .top-bar, .toolbar-v3, .kpi-grid, .table-container, .timeline-container,
+  .btn, .btn-close, .modal-footer, #modalProcesso, #modalProjeto, #modalSistemas,
+  #modalSincronizacao, #modalUsuarios, #modalImportacaoLote, #modalGargalos, #modalHistorico {
+    display: none !important;
+  }
+  #modalPreview {
+    display: block !important;
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+  #modalPreview .modal-content {
+    box-shadow: none !important;
+    border: none !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  #modalPreview .modal-header {
+    border-bottom: 2px solid #000 !important;
+    margin-bottom: 12px !important;
+    padding: 0 0 10px 0 !important;
+  }
+  #modalPreview .modal-body {
+    padding: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+  .preview-html-box {
+    border: none !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm 12mm 12mm;
+  }
+}

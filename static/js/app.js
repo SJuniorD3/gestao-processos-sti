@@ -74,10 +74,12 @@ async function carregarUsuarioAtual() {
         const btnProj = document.getElementById("btnHeaderNovoProjeto");
         const btnEditProj = document.getElementById("btnHeaderEditarProjeto");
         const btnSync = document.getElementById("btnHeaderSincronizar");
+        const btnImport = document.getElementById("btnHeaderImportarLote");
         if (btnProc) btnProc.style.display = "none";
         if (btnProj) btnProj.style.display = "none";
         if (btnEditProj) btnEditProj.style.display = "none";
         if (btnSync) btnSync.style.display = "none";
+        if (btnImport) btnImport.style.display = "none";
       }
     }
   } catch (err) {
@@ -1591,5 +1593,405 @@ async function carregarLogsAuditoria() {
     }
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="5" class="loading-cell text-danger">Erro ao carregar auditoria.</td></tr>`;
+  }
+}
+
+// ==========================================================================
+// ITEM 5: RELATÓRIOS EXECUTIVOS, IMPRESSÃO A4, GARGALOS & IMPORTAÇÃO EM LOTE
+// ==========================================================================
+
+// -------------------------------------------------------------
+// RELATÓRIO EXECUTIVO OFICIAL (IMPRESSÃO / PDF A4)
+// -------------------------------------------------------------
+function abrirRelatorioExecutivo() {
+  window.open("/relatorio-executivo", "_blank");
+}
+
+function imprimirResumoAtual() {
+  window.print();
+}
+
+// -------------------------------------------------------------
+// IMPORTAÇÃO EM LOTE (CSV / PLANILHA EXCEL)
+// -------------------------------------------------------------
+let dadosLoteParaImportar = [];
+
+function abrirModalImportacao() {
+  dadosLoteParaImportar = [];
+  const modal = document.getElementById("modalImportacaoLote");
+  if (!modal) return;
+  
+  alternarAbaImportacao("arquivo");
+  document.getElementById("txtColarPlanilha").value = "";
+  document.getElementById("inputFileCSV").value = "";
+  document.getElementById("boxPreviewImport").style.display = "none";
+  document.getElementById("boxStatusImport").style.display = "none";
+  document.getElementById("btnConfirmarImportacao").disabled = true;
+  document.getElementById("btnConfirmarImportacao").innerHTML = '<span class="icon">🚀</span> Confirmar e Importar';
+  
+  configurarDropzoneCSV();
+  modal.style.display = "flex";
+}
+
+function fecharModalImportacao() {
+  const modal = document.getElementById("modalImportacaoLote");
+  if (modal) modal.style.display = "none";
+}
+
+function alternarAbaImportacao(aba) {
+  const btnArq = document.getElementById("tabBtnImportArquivo");
+  const btnColar = document.getElementById("tabBtnImportColar");
+  const boxArq = document.getElementById("abaImportArquivo");
+  const boxColar = document.getElementById("abaImportColar");
+
+  if (aba === "arquivo") {
+    btnArq.classList.add("active");
+    btnArq.style.borderBottom = "2px solid #2563eb";
+    btnArq.style.fontWeight = "700";
+    btnColar.classList.remove("active");
+    btnColar.style.borderBottom = "none";
+    btnColar.style.fontWeight = "600";
+    boxArq.style.display = "block";
+    boxColar.style.display = "none";
+  } else {
+    btnColar.classList.add("active");
+    btnColar.style.borderBottom = "2px solid #2563eb";
+    btnColar.style.fontWeight = "700";
+    btnArq.classList.remove("active");
+    btnArq.style.borderBottom = "none";
+    btnArq.style.fontWeight = "600";
+    boxColar.style.display = "block";
+    boxArq.style.display = "none";
+  }
+}
+
+function baixarModeloCSV() {
+  const cabecalho = "Projeto;Sistema;Numero_Processo;Descricao;Local_Atual;Acao;Data_Recebimento;Situacao";
+  const linha1 = "STI;SEI;00010.000123/2026;Aquisição de Switches e Roteadores;STI;Análise Técnica;01/03/2026;Em tramitação";
+  const linha2 = "CONECTIVIDADE;STARTGOV;00010.000456/2026;Licitação de Links Dedicados;CPL / Licitações;Elaboração de Edital;15/02/2026;Aguardando Publicação";
+  const conteudo = "\ufeff" + cabecalho + "\n" + linha1 + "\n" + linha2;
+  
+  const blob = new Blob([conteudo], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "Modelo_Importacao_Processos_STI.csv";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function carregarExemploColar() {
+  const exemplo = `Projeto;Sistema;Numero_Processo;Descricao;Local_Atual;Acao;Data_Recebimento;Situacao
+STI;SEI;00010.000123/2026;Aquisição de Switches e Roteadores;STI;Análise Técnica;01/03/2026;Em tramitação
+INFRAESTRUTURA;STARTGOV;00010.000789/2026;Manutenção de Data Center;STI/Suporte;Em execução;10/02/2026;Em andamento`;
+  const textarea = document.getElementById("txtColarPlanilha");
+  textarea.value = exemplo;
+  parsearTextoColado();
+}
+
+function configurarDropzoneCSV() {
+  const dropzone = document.getElementById("dropzoneCSV");
+  if (!dropzone || dropzone._configurado) return;
+  dropzone._configurado = true;
+
+  ["dragenter", "dragover"].forEach(eventName => {
+    dropzone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.add("dragover");
+    }, false);
+  });
+
+  ["dragleave", "drop"].forEach(eventName => {
+    dropzone.addEventListener(eventName, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.remove("dragover");
+    }, false);
+  });
+
+  dropzone.addEventListener("drop", (e) => {
+    const dt = e.dataTransfer;
+    const files = dt.files;
+    if (files.length) {
+      processarArquivoCSV(files[0]);
+    }
+  }, false);
+}
+
+function aoSelecionarArquivoCSV(event) {
+  const file = event.target.files[0];
+  if (file) {
+    processarArquivoCSV(file);
+  }
+}
+
+function processarArquivoCSV(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    const texto = e.target.result;
+    parsearConteudoCSV(texto);
+  };
+  reader.readAsText(file, "UTF-8");
+}
+
+function parsearTextoColado() {
+  const texto = document.getElementById("txtColarPlanilha").value;
+  parsearConteudoCSV(texto);
+}
+
+function parsearConteudoCSV(texto) {
+  dadosLoteParaImportar = [];
+  const statusBox = document.getElementById("boxStatusImport");
+  const previewBox = document.getElementById("boxPreviewImport");
+  const btnConfirmar = document.getElementById("btnConfirmarImportacao");
+  const tbody = document.getElementById("tabelaPreviewImportCorpo");
+
+  if (!texto || !texto.trim()) {
+    previewBox.style.display = "none";
+    btnConfirmar.disabled = true;
+    return;
+  }
+
+  // Detecta quebra de linha
+  const linhas = texto.trim().split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (linhas.length < 2) {
+    statusBox.style.display = "block";
+    statusBox.style.background = "#fef2f2";
+    statusBox.style.color = "#b91c1c";
+    statusBox.textContent = "O conteúdo precisa ter pelo menos 1 linha de cabeçalho e 1 linha de dados.";
+    btnConfirmar.disabled = true;
+    return;
+  }
+
+  // Detecta delimitador (, ; ou \t)
+  const primeiraLinha = linhas[0];
+  let delimitador = ";";
+  if (primeiraLinha.includes("\t")) delimitador = "\t";
+  else if (primeiraLinha.includes(";") && !primeiraLinha.includes(",")) delimitador = ";";
+  else if (primeiraLinha.includes(",")) delimitador = ",";
+
+  const cabecalho = primeiraLinha.split(delimitador).map(c => c.trim().toLowerCase().replace(/["']/g, ""));
+
+  function getIdx(nomes, padrao) {
+    for (const n of nomes) {
+      const idx = cabecalho.indexOf(n);
+      if (idx !== -1) return idx;
+    }
+    return padrao;
+  }
+
+  const iProj = getIdx(["projeto", "nome do projeto", "proj"], 0);
+  const iSis = getIdx(["sistema", "tipo", "origem"], 1);
+  const iNum = getIdx(["numero_processo", "processo", "nº processo", "nº - processo", "numero", "nº"], 2);
+  const iDesc = getIdx(["descricao", "descrição", "objeto", "objeto/descrição"], 3);
+  const iLocal = getIdx(["local_atual", "local", "setor", "unidade"], 4);
+  const iAcao = getIdx(["acao", "ação"], 5);
+  const iData = getIdx(["data_recebimento", "data", "recebimento", "dt_recebimento"], 6);
+  const iSit = getIdx(["situacao", "situação", "status"], 7);
+
+  for (let i = 1; i < linhas.length; i++) {
+    const colunas = linhas[i].split(delimitador).map(c => c.trim().replace(/^["']|["']$/g, ""));
+    const col = (idx, def) => (idx >= 0 && idx < colunas.length && colunas[idx]) ? colunas[idx] : def;
+    
+    const num = col(iNum, "");
+    if (!num) continue;
+
+    dadosLoteParaImportar.push({
+      projeto: col(iProj, "STI"),
+      sistema: (col(iSis, "SEI").toUpperCase().includes("START") ? "STARTGOV" : "SEI"),
+      numero_processo: num,
+      descricao: col(iDesc, ""),
+      local_atual: col(iLocal, "Aguardando Monitoramento"),
+      acao: col(iAcao, "Aguardando trâmite"),
+      data_recebimento: col(iData, ""),
+      situacao: col(iSit, "Em tramitação"),
+      monitorar: 1
+    });
+  }
+
+  if (dadosLoteParaImportar.length === 0) {
+    statusBox.style.display = "block";
+    statusBox.style.background = "#fef2f2";
+    statusBox.style.color = "#b91c1c";
+    statusBox.textContent = "Nenhum processo válido encontrado. Verifique a coluna com o Número do Processo.";
+    previewBox.style.display = "none";
+    btnConfirmar.disabled = true;
+    return;
+  }
+
+  // Preenche a tabela de preview
+  statusBox.style.display = "none";
+  document.getElementById("lblQtdImportDetectados").textContent = dadosLoteParaImportar.length;
+  
+  let html = "";
+  dadosLoteParaImportar.slice(0, 50).forEach(p => {
+    html += `
+      <tr style="border-bottom: 1px solid #f1f5f9;">
+        <td style="padding: 6px 8px;"><span class="badge-${p.sistema.toLowerCase()}" style="padding: 2px 5px; border-radius: 4px; font-weight: 700; font-size: 10px;">${escapeHtml(p.sistema)}</span></td>
+        <td style="padding: 6px 8px; font-family: monospace; font-weight: 600;">${escapeHtml(p.numero_processo)}</td>
+        <td style="padding: 6px 8px; color: #0f172a;">${escapeHtml(p.projeto)}</td>
+        <td style="padding: 6px 8px; color: #475569;">${escapeHtml(p.local_atual)}</td>
+        <td style="padding: 6px 8px; color: #64748b;">${escapeHtml(p.data_recebimento || "-")}</td>
+      </tr>
+    `;
+  });
+  if (dadosLoteParaImportar.length > 50) {
+    html += `<tr><td colspan="5" style="text-align: center; color: #64748b; font-size: 11px; padding: 6px;">... e mais ${dadosLoteParaImportar.length - 50} processos listados</td></tr>`;
+  }
+
+  tbody.innerHTML = html;
+  previewBox.style.display = "block";
+  btnConfirmar.disabled = false;
+  btnConfirmar.innerHTML = `<span class="icon">🚀</span> Importar ${dadosLoteParaImportar.length} Processos`;
+}
+
+async function executarImportacaoLote() {
+  if (dadosLoteParaImportar.length === 0) return;
+  
+  const btn = document.getElementById("btnConfirmarImportacao");
+  const statusBox = document.getElementById("boxStatusImport");
+  
+  btn.disabled = true;
+  btn.innerHTML = `<span>⏳</span> Importando ${dadosLoteParaImportar.length} processos...`;
+  
+  statusBox.style.display = "block";
+  statusBox.style.background = "#eff6ff";
+  statusBox.style.color = "#1e40af";
+  statusBox.textContent = "Processando registros no banco de dados...";
+
+  try {
+    const res = await fetch("/api/processos/importar-lote", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ registros: dadosLoteParaImportar })
+    });
+    const json = await res.json();
+
+    if (json.success) {
+      statusBox.style.background = "#dcfce7";
+      statusBox.style.color = "#15803d";
+      statusBox.innerHTML = `
+        <strong>✓ ${escapeHtml(json.message)}</strong><br>
+        <span style="font-size: 11.5px;">Novos cadastrados: ${json.criados} | Atualizados: ${json.atualizados}</span>
+        ${json.erros && json.erros.length > 0 ? `<br><span style="color: #b91c1c; font-size: 11px;">Avisos: ${json.erros.join("; ")}</span>` : ""}
+      `;
+      btn.innerHTML = `<span>✓</span> Importação Concluída!`;
+      
+      // Recarrega os dados do sistema
+      carregarDados();
+      setTimeout(() => {
+        fecharModalImportacao();
+      }, 2200);
+    } else {
+      statusBox.style.background = "#fef2f2";
+      statusBox.style.color = "#b91c1c";
+      statusBox.textContent = "Erro na importação: " + json.error;
+      btn.disabled = false;
+      btn.innerHTML = `<span class="icon">🚀</span> Tentar Novamente`;
+    }
+  } catch (err) {
+    statusBox.style.background = "#fef2f2";
+    statusBox.style.color = "#b91c1c";
+    statusBox.textContent = "Erro de conexão ao importar: " + err.message;
+    btn.disabled = false;
+    btn.innerHTML = `<span class="icon">🚀</span> Tentar Novamente`;
+  }
+}
+
+// -------------------------------------------------------------
+// PAINEL DE GARGALOS & CUMPRIMENTO DE SLA
+// -------------------------------------------------------------
+async function abrirModalGargalos() {
+  const modal = document.getElementById("modalGargalos");
+  if (!modal) return;
+  modal.style.display = "flex";
+  await carregarMetricasGargalos();
+}
+
+function fecharModalGargalos() {
+  const modal = document.getElementById("modalGargalos");
+  if (modal) modal.style.display = "none";
+}
+
+async function carregarMetricasGargalos() {
+  const s15 = document.getElementById("gargaloSla15");
+  const s30 = document.getElementById("gargaloSla30");
+  const s60 = document.getElementById("gargaloSla60");
+  const sMais60 = document.getElementById("gargaloSlaMais60");
+  const lblMedia = document.getElementById("gargaloMediaGeral");
+  const containerSetores = document.getElementById("listaGargalosSetores");
+  const containerTop = document.getElementById("listaGargalosTopAtrasados");
+
+  containerSetores.innerHTML = `<div style="text-align: center; color: #64748b; font-size: 12px; padding: 20px;">Carregando indicadores...</div>`;
+  containerTop.innerHTML = `<div style="text-align: center; color: #64748b; font-size: 12px; padding: 20px;">Carregando processos críticos...</div>`;
+
+  try {
+    const res = await fetch("/api/metricas/gargalos");
+    const json = await res.json();
+    if (json.success && json.data) {
+      const d = json.data;
+      const faixas = d.faixas_sla || {};
+
+      if (s15) s15.textContent = faixas.ate_15_dias || 0;
+      if (s30) s30.textContent = faixas.de_16_a_30 || 0;
+      if (s60) s60.textContent = faixas.de_31_a_60 || 0;
+      if (sMais60) sMais60.textContent = faixas.mais_de_60 || 0;
+      if (lblMedia) lblMedia.textContent = `Média Geral: ${d.media_dias_geral || 0} dias`;
+
+      // Renderiza Setores com barras proporcionais
+      const setores = d.por_setor || [];
+      if (setores.length === 0) {
+        containerSetores.innerHTML = `<div style="color: #64748b; font-size: 12px; text-align: center;">Nenhum setor com processos ativos.</div>`;
+      } else {
+        const maxQtd = Math.max(...setores.map(s => s.total), 1);
+        let htmlSetores = "";
+        setores.forEach(s => {
+          const pct = Math.round((s.total / maxQtd) * 100);
+          const corBadge = s.media_dias > 60 ? "#ef4444" : (s.media_dias > 30 ? "#f59e0b" : "#2563eb");
+          htmlSetores += `
+            <div class="gargalo-setor-item">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px;">
+                <strong style="color: #0f172a; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(s.setor)}">${escapeHtml(s.setor)}</strong>
+                <span style="font-weight: 700; color: ${corBadge};">${s.total} proc. (Média: ${s.media_dias}d)</span>
+              </div>
+              <div style="background: #e2e8f0; height: 6px; border-radius: 9999px; overflow: hidden;">
+                <div style="background: ${corBadge}; width: ${pct}%; height: 100%; border-radius: 9999px;"></div>
+              </div>
+            </div>
+          `;
+        });
+        containerSetores.innerHTML = htmlSetores;
+      }
+
+      // Renderiza Top Processos Críticos
+      const top = d.top_atrasados || [];
+      if (top.length === 0) {
+        containerTop.innerHTML = `<div style="color: #16a34a; font-size: 12px; text-align: center; padding: 20px;">✓ Nenhum processo com atraso crítico registrado!</div>`;
+      } else {
+        let htmlTop = "";
+        top.forEach(p => {
+          htmlTop += `
+            <div class="gargalo-top-item">
+              <div style="flex: 1; min-width: 0;">
+                <div style="font-weight: 700; font-family: monospace; font-size: 12px; color: #0f172a;">${escapeHtml(p.numero_processo)}</div>
+                <div style="font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(p.projeto)} &bull; ${escapeHtml(p.local_atual)}</div>
+              </div>
+              <div style="text-align: right; margin-left: 10px;">
+                <span style="background: #fee2e2; color: #dc2626; font-weight: 800; padding: 2px 6px; border-radius: 4px; font-size: 11px; white-space: nowrap;">
+                  ${p.dias_no_setor} dias
+                </span>
+              </div>
+            </div>
+          `;
+        });
+        containerTop.innerHTML = htmlTop;
+      }
+    }
+  } catch (err) {
+    containerSetores.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Falha ao carregar métricas.</div>`;
+    containerTop.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Falha ao carregar métricas.</div>`;
   }
 }

@@ -44,6 +44,12 @@
         <button class="btn btn-outline" id="btnHeaderEditarProjeto" onclick="abrirModalEditarProjeto()">
           <span class="icon">✏️</span> Projetos
         </button>
+        <button class="btn btn-outline" id="btnHeaderImportarLote" onclick="abrirModalImportacao()" title="Importar processos em lote via planilha ou CSV">
+          <span class="icon">📥</span> Importar Lote
+        </button>
+        <button class="btn btn-outline" id="btnHeaderGargalos" onclick="abrirModalGargalos()" title="Painel de Gargalos Operacionais e Análise de SLA">
+          <span class="icon">📊</span> Gargalos & SLA
+        </button>
         <button class="btn btn-secondary" id="btnHeaderSincronizar" onclick="sincronizarSistemasWeb()" title="Consultar portais oficiais">
           <span class="icon">🔄</span> Sincronizar
         </button>
@@ -152,9 +158,12 @@
           </button>
         </div>
 
-        <div style="display: flex; gap: 8px;">
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
           <button class="btn btn-secondary" onclick="exportarCSV()">
             <span class="icon">📥</span> Exportar Excel
+          </button>
+          <button class="btn btn-secondary" onclick="abrirRelatorioExecutivo()" title="Abrir Relatório Executivo Timbrado para Impressão A4 / PDF">
+            <span class="icon">📑</span> Relatório Executivo (A4)
           </button>
           <button class="btn btn-secondary" onclick="verPreviewRelatorio()">
             <span class="icon">👁️</span> Prévia do Resumo
@@ -409,7 +418,15 @@
           <!-- HTML do e-mail/webhook injetado dinamicamente -->
         </div>
       </div>
-      <div class="modal-footer">
+      <div class="modal-footer" style="justify-content: space-between;">
+        <div style="display: flex; gap: 8px;">
+          <button type="button" class="btn btn-primary" onclick="imprimirResumoAtual()">
+            <span class="icon">🖨️</span> Imprimir Resumo
+          </button>
+          <button type="button" class="btn btn-outline" onclick="abrirRelatorioExecutivo()">
+            <span class="icon">📑</span> Versão Executiva (A4)
+          </button>
+        </div>
         <button type="button" class="btn btn-secondary" onclick="fecharModalPreview()">Fechar</button>
       </div>
     </div>
@@ -643,8 +660,197 @@
     </div>
   </div>
 
+  <!-- MODAL: IMPORTAÇÃO EM LOTE VIA PLANILHA / CSV -->
+  <div class="modal-overlay" id="modalImportacaoLote">
+    <div class="modal-content modal-content-lg">
+      <div class="modal-header">
+        <div class="modal-header-text">
+          <h2 style="display: flex; align-items: center; gap: 8px;">
+            <span>📥</span> Importação em Lote de Processos (CSV / Planilha)
+          </h2>
+          <span>Importe dezenas ou centenas de processos simultaneamente de planilhas Excel ou relatórios SEI</span>
+        </div>
+        <button type="button" class="btn-close" onclick="fecharModalImportacao()">&times;</button>
+      </div>
+
+      <!-- Abas de Entrada -->
+      <div style="display: flex; border-bottom: 1px solid #e2e8f0; background: #f8fafc; padding: 0 20px;">
+        <button type="button" id="tabBtnImportArquivo" class="view-btn active" style="border-radius: 0; padding: 12px 16px; border-bottom: 2px solid #2563eb; font-weight: 700;" onclick="alternarAbaImportacao('arquivo')">
+          📁 Enviar Arquivo (.CSV)
+        </button>
+        <button type="button" id="tabBtnImportColar" class="view-btn" style="border-radius: 0; padding: 12px 16px; font-weight: 600;" onclick="alternarAbaImportacao('colar')">
+          📋 Colar Dados do Excel
+        </button>
+      </div>
+
+      <div class="modal-body" style="padding: 20px 24px;">
+        <!-- ABA 1: UPLOAD DE ARQUIVO -->
+        <div id="abaImportArquivo">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+            <span style="font-size: 12.5px; color: #64748b;">
+              Selecione um arquivo CSV com as colunas: <em>Projeto, Sistema, Nº Processo, Objeto, Local, Ação, Data, Situação</em>.
+            </span>
+            <button type="button" class="btn btn-sm btn-outline" onclick="baixarModeloCSV()">
+              📥 Baixar Modelo CSV
+            </button>
+          </div>
+
+          <div id="dropzoneCSV" style="border: 2px dashed #cbd5e1; border-radius: 12px; padding: 28px 20px; text-align: center; background: #f8fafc; cursor: pointer; transition: all 0.2s ease;" onclick="document.getElementById('inputFileCSV').click()">
+            <div style="font-size: 32px; margin-bottom: 8px;">📄</div>
+            <strong style="color: #0f172a; font-size: 14px; display: block; margin-bottom: 4px;">Arraste e solte seu arquivo CSV aqui</strong>
+            <span style="color: #64748b; font-size: 12px;">ou clique para selecionar do seu computador</span>
+            <input type="file" id="inputFileCSV" accept=".csv, .txt" style="display: none;" onchange="aoSelecionarArquivoCSV(event)">
+          </div>
+        </div>
+
+        <!-- ABA 2: COLAR DADOS DIRETOS -->
+        <div id="abaImportColar" style="display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <label for="txtColarPlanilha" style="font-size: 12.5px; font-weight: 700; color: #334155;">
+              Cole os dados copiados do Excel ou do SEI (separados por tabulação ou ponto-e-vírgula):
+            </label>
+            <button type="button" class="btn btn-sm btn-outline" onclick="carregarExemploColar()">
+              Inserir Exemplo
+            </button>
+          </div>
+          <textarea id="txtColarPlanilha" rows="7" style="width: 100%; border: 1px solid #cbd5e1; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 12px; resize: vertical;" placeholder="Projeto;Sistema;Numero_Processo;Descricao;Local_Atual;Acao;Data_Recebimento;Situacao&#10;STI;SEI;00010.000123/2026;Aquisição de Computadores;STI;Análise Técnica;01/03/2026;Em tramitação" oninput="parsearTextoColado()"></textarea>
+        </div>
+
+        <!-- ÁREA DE PRÉ-VISUALIZAÇÃO DOS DADOS -->
+        <div id="boxPreviewImport" style="margin-top: 18px; display: none;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <strong style="font-size: 13px; color: #0f172a;">
+              Pré-visualização: <span id="lblQtdImportDetectados" style="color: #2563eb;">0</span> processos identificados
+            </strong>
+            <span style="font-size: 11px; color: #64748b;">(Processos existentes serão atualizados automaticamente)</span>
+          </div>
+          <div style="max-height: 220px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; background: #ffffff;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 11.5px;">
+              <thead style="background: #f8fafc; position: sticky; top: 0; z-index: 1; border-bottom: 1px solid #e2e8f0;">
+                <tr>
+                  <th style="padding: 8px; text-align: left; color: #475569;">Sistema</th>
+                  <th style="padding: 8px; text-align: left; color: #475569;">Nº Processo</th>
+                  <th style="padding: 8px; text-align: left; color: #475569;">Projeto</th>
+                  <th style="padding: 8px; text-align: left; color: #475569;">Local Atual</th>
+                  <th style="padding: 8px; text-align: left; color: #475569;">Data</th>
+                </tr>
+              </thead>
+              <tbody id="tabelaPreviewImportCorpo">
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- FEEDBACK / PROGRESSO -->
+        <div id="boxStatusImport" style="margin-top: 14px; display: none; padding: 12px; border-radius: 8px; font-size: 12.5px;"></div>
+      </div>
+
+      <div class="modal-footer" style="justify-content: space-between;">
+        <button type="button" class="btn btn-secondary" onclick="fecharModalImportacao()">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btnConfirmarImportacao" onclick="executarImportacaoLote()" disabled>
+          <span class="icon">🚀</span> Confirmar e Importar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: PAINEL DE GARGALOS & ANÁLISE DE SLA -->
+  <div class="modal-overlay" id="modalGargalos">
+    <div class="modal-content modal-content-lg">
+      <div class="modal-header">
+        <div class="modal-header-text">
+          <h2 style="display: flex; align-items: center; gap: 8px;">
+            <span>📊</span> Painel de Gargalos & Cumprimento de SLA
+          </h2>
+          <span>Identificação de setores com retenção processual e processos fora do prazo</span>
+        </div>
+        <button type="button" class="btn-close" onclick="fecharModalGargalos()">&times;</button>
+      </div>
+
+      <div class="modal-body" style="padding: 20px 24px;">
+        <!-- CARDS DE FAIXAS DE SLA -->
+        <div class="kpi-grid" style="margin-bottom: 20px;">
+          <div class="kpi-card" style="border-top: 3px solid #10b981;">
+            <div class="kpi-icon icon-blue" style="background: #dcfce7; color: #16a34a;">🟢</div>
+            <div style="flex: 1;">
+              <span class="kpi-title" style="color: #16a34a;">No Prazo (≤ 15d)</span>
+              <div class="kpi-value-row">
+                <span class="kpi-value" id="gargaloSla15" style="color: #16a34a;">0</span>
+                <span class="kpi-tag" style="background: #dcfce7; color: #16a34a;">Normal</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="kpi-card" style="border-top: 3px solid #3b82f6;">
+            <div class="kpi-icon icon-blue">🟡</div>
+            <div style="flex: 1;">
+              <span class="kpi-title" style="color: #2563eb;">Atenção (16 a 30d)</span>
+              <div class="kpi-value-row">
+                <span class="kpi-value" id="gargaloSla30" style="color: #2563eb;">0</span>
+                <span class="kpi-tag kpi-tag-blue">Moderado</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="kpi-card" style="border-top: 3px solid #f59e0b;">
+            <div class="kpi-icon icon-indigo" style="background: #fef3c7; color: #d97706;">🟠</div>
+            <div style="flex: 1;">
+              <span class="kpi-title" style="color: #d97706;">Crítico (31 a 60d)</span>
+              <div class="kpi-value-row">
+                <span class="kpi-value" id="gargaloSla60" style="color: #d97706;">0</span>
+                <span class="kpi-tag" style="background: #fef3c7; color: #d97706;">Cobrança</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="kpi-card kpi-card-alert" style="border-top: 3px solid #ef4444;">
+            <div class="kpi-icon icon-red">🔴</div>
+            <div style="flex: 1;">
+              <span class="kpi-title" style="color: #b91c1c;">Grave (&gt; 60d)</span>
+              <div class="kpi-value-row">
+                <span class="kpi-value" id="gargaloSlaMais60" style="color: #dc2626;">0</span>
+                <span class="kpi-tag kpi-tag-red">Urgente</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+          <!-- COLUNA 1: RETENÇÃO POR SETOR -->
+          <div style="flex: 1 1 340px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <strong style="font-size: 13px; color: #0f172a;">Distribuição por Setor / Unidade</strong>
+              <span id="gargaloMediaGeral" style="font-size: 11px; font-weight: 700; color: #64748b; background: #f1f5f9; padding: 3px 8px; border-radius: 6px;">Média: 0 dias</span>
+            </div>
+            <div id="listaGargalosSetores" style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px;">
+              <!-- Barras de setores inseridas via JS -->
+            </div>
+          </div>
+
+          <!-- COLUNA 2: TOP PROCESSOS COM MAIOR RETENÇÃO -->
+          <div style="flex: 1 1 340px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <strong style="font-size: 13px; color: #0f172a;">Top Processos com Maior Tempo Parado</strong>
+              <span style="font-size: 11px; color: #dc2626; font-weight: 700;">Requerem Ação Imediata</span>
+            </div>
+            <div id="listaGargalosTopAtrasados" style="max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
+              <!-- Lista de processos críticos inserida via JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer" style="justify-content: space-between;">
+        <button type="button" class="btn btn-outline" onclick="abrirRelatorioExecutivo()">
+          <span class="icon">📑</span> Ver Relatório Executivo Completo
+        </button>
+        <button type="button" class="btn btn-secondary" onclick="fecharModalGargalos()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- SCRIPTS DA APLICAÇÃO -->
-  <script src="/js/app.js?v=3.2.0"></script>
+  <script src="/js/app.js?v=3.3.0"></script>
 
   <!-- ATALHO DE TECLADO CTRL+K / CMD+K -->
   <script>
