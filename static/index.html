@@ -849,8 +849,24 @@
     </div>
   </div>
 
+  <!-- CONTAINER DE TOAST NOTIFICATIONS (MICRO-INTERAÇÕES) -->
+  <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+  <!-- MODAL: CONFIRMAÇÃO MODERNA DE AÇÕES CRÍTICAS -->
+  <div class="modal-overlay" id="modalConfirmacao" style="z-index: 100000;">
+    <div class="modal-content" style="max-width: 440px; text-align: center; padding: 28px 24px;">
+      <div id="confirmaIcone" style="font-size: 42px; margin-bottom: 12px;">⚠️</div>
+      <h3 id="confirmaTitulo" style="font-size: 17px; font-weight: 800; color: #0f172a; margin-bottom: 8px;">Confirmação</h3>
+      <p id="confirmaMensagem" style="font-size: 13px; color: #64748b; line-height: 1.5; margin-bottom: 24px;"></p>
+      <div style="display: flex; gap: 10px; justify-content: center;">
+        <button type="button" class="btn btn-secondary" id="btnConfirmaCancelar" style="flex: 1; min-height: 40px;">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btnConfirmaConfirmar" style="flex: 1; min-height: 40px;">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- SCRIPTS DA APLICAÇÃO -->
-  <script src="/js/app.js?v=3.3.0"></script>
+  <script src="/js/app.js?v=3.4.0"></script>
 
   <!-- ATALHO DE TECLADO CTRL+K / CMD+K -->
   <script>

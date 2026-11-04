@@ -29,6 +29,142 @@ let modoVisualizacaoAtual = "tabela";
 let projetosFiltradosCache = [];
 let usuarioLogado = null;
 
+// ==========================================================================
+// SISTEMA DE TOAST NOTIFICATIONS & MICRO-INTERAÇÕES (UX PRO V3.0)
+// ==========================================================================
+function showToast(mensagem, tipo = "info", duracao = 3800) {
+  let container = document.getElementById("toastContainer");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "toastContainer";
+    container.className = "toast-container";
+    document.body.appendChild(container);
+  }
+
+  const toast = document.createElement("div");
+  toast.className = `sti-toast toast-${tipo}`;
+
+  let icone = "ℹ️";
+  if (tipo === "sucesso") icone = "✓";
+  else if (tipo === "erro") icone = "✕";
+  else if (tipo === "alerta") icone = "⚠️";
+
+  toast.innerHTML = `
+    <span class="toast-icon">${icone}</span>
+    <span class="toast-msg">${escapeHtml(String(mensagem))}</span>
+    <button class="toast-close" title="Fechar">&times;</button>
+  `;
+
+  const fechar = () => {
+    toast.style.animation = "toastSlideOut 0.25s ease forwards";
+    setTimeout(() => {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 250);
+  };
+
+  toast.querySelector(".toast-close").onclick = fechar;
+  container.appendChild(toast);
+
+  if (duracao > 0) {
+    setTimeout(fechar, duracao);
+  }
+}
+
+function mostrarConfirmacao({ titulo = "Confirmação", mensagem, icone = "⚠️", textoConfirmar = "Confirmar", tipo = "primary", aoConfirmar }) {
+  const modal = document.getElementById("modalConfirmacao");
+  if (!modal) {
+    if (confirm(mensagem.replace(/<[^>]*>/g, ""))) {
+      if (typeof aoConfirmar === "function") aoConfirmar();
+    }
+    return;
+  }
+
+  const elIcone = document.getElementById("confirmaIcone");
+  const elTitulo = document.getElementById("confirmaTitulo");
+  const elMsg = document.getElementById("confirmaMensagem");
+  const btnConf = document.getElementById("btnConfirmaConfirmar");
+  const btnCanc = document.getElementById("btnConfirmaCancelar");
+
+  if (elIcone) elIcone.textContent = icone;
+  if (elTitulo) elTitulo.textContent = titulo;
+  if (elMsg) elMsg.innerHTML = mensagem;
+
+  if (btnConf) {
+    btnConf.textContent = textoConfirmar;
+    if (tipo === "danger") {
+      btnConf.className = "btn btn-primary";
+      btnConf.style.background = "#dc2626";
+      btnConf.style.borderColor = "#b91c1c";
+    } else {
+      btnConf.className = "btn btn-primary";
+      btnConf.style.background = "#2563eb";
+      btnConf.style.borderColor = "#1d4ed8";
+    }
+
+    btnConf.onclick = () => {
+      modal.style.display = "none";
+      if (typeof aoConfirmar === "function") aoConfirmar();
+    };
+  }
+
+  if (btnCanc) {
+    btnCanc.onclick = () => {
+      modal.style.display = "none";
+    };
+  }
+
+  modal.style.display = "flex";
+}
+
+async function copiarTexto(texto, btn) {
+  try {
+    await navigator.clipboard.writeText(texto);
+    if (btn) {
+      const original = btn.innerHTML;
+      btn.innerHTML = "✓";
+      btn.style.color = "#16a34a";
+      setTimeout(() => {
+        btn.innerHTML = original;
+        btn.style.color = "";
+      }, 1500);
+    }
+    showToast(`Número copiado: ${texto}`, "sucesso", 2000);
+  } catch (err) {
+    const tempInput = document.createElement("input");
+    tempInput.value = texto;
+    document.body.appendChild(tempInput);
+    tempInput.select();
+    document.execCommand("copy");
+    document.body.removeChild(tempInput);
+    showToast(`Número copiado: ${texto}`, "sucesso", 2000);
+  }
+}
+
+function exibirSkeletons() {
+  const tbody = document.getElementById("tabelaCorpo");
+  if (tbody) {
+    let rows = "";
+    for (let i = 0; i < 4; i++) {
+      rows += `
+        <tr class="skeleton-row">
+          <td><div class="skeleton-box" style="width: 110px; height: 18px;"></div></td>
+          <td><div class="skeleton-box" style="width: 50px; height: 18px;"></div></td>
+          <td><div class="skeleton-box" style="width: 140px; height: 18px;"></div></td>
+          <td><div class="skeleton-box" style="width: 180px; height: 18px;"></div></td>
+          <td><div class="skeleton-box" style="width: 120px; height: 18px;"></div></td>
+          <td><div class="skeleton-box" style="width: 100px; height: 18px;"></div></td>
+          <td><div class="skeleton-box" style="width: 70px; height: 18px;"></div></td>
+          <td><div class="skeleton-box" style="width: 90px; height: 18px;"></div></td>
+          <td><div class="skeleton-box" style="width: 40px; height: 18px;"></div></td>
+          <td><div class="skeleton-box" style="width: 70px; height: 18px;"></div></td>
+          <td><div class="skeleton-box" style="width: 60px; height: 18px;"></div></td>
+        </tr>
+      `;
+    }
+    tbody.innerHTML = rows;
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   carregarUsuarioAtual();
   carregarDados();
@@ -88,6 +224,7 @@ async function carregarUsuarioAtual() {
 }
 
 async function carregarDados() {
+  exibirSkeletons();
   try {
     const res = await fetch("/api/projetos");
     const json = await res.json();
@@ -169,7 +306,18 @@ function alternarModoVisualizacao(modo) {
 function renderizarTabela(listaProjetos) {
   const tbody = document.getElementById("tabelaCorpo");
   if (!listaProjetos || listaProjetos.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="11" class="loading-cell">Nenhum projeto cadastrado.</td></tr>`;
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="11" style="padding: 48px 20px; text-align: center;">
+          <div style="max-width: 360px; margin: 0 auto; color: #64748b;">
+            <div style="font-size: 40px; margin-bottom: 10px;">🔍</div>
+            <strong style="color: #0f172a; font-size: 15px; display: block; margin-bottom: 6px;">Nenhum processo ou projeto encontrado</strong>
+            <p style="font-size: 12.5px; line-height: 1.5; margin-bottom: 16px;">Tente alterar os termos de busca ou redefinir os filtros aplicados para visualizar os dados.</p>
+            <button class="btn btn-sm btn-outline" onclick="limparFiltrosV3()">Limpar Filtros e Ver Todos</button>
+          </div>
+        </td>
+      </tr>
+    `;
     return;
   }
 
@@ -244,11 +392,16 @@ function renderizarTabela(listaProjetos) {
           ${celulaProjeto}
           <td class="text-center" style="font-weight: 600;">${p.sistema}</td>
           <td style="font-family: monospace; font-weight: 600;">
-            <a href="javascript:void(0)" onclick="abrirProcessoExterno('${escapeHtml(p.sistema)}', '${escapeHtml(p.numero_processo)}')" 
-               style="color: #2563eb; text-decoration: underline; cursor: pointer;" 
-               title="Clique para abrir diretamente no portal ${escapeHtml(p.sistema)}">
-              🔗 ${escapeHtml(p.numero_processo)}
-            </a>
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 4px;">
+              <a href="javascript:void(0)" onclick="abrirProcessoExterno('${escapeHtml(p.sistema)}', '${escapeHtml(p.numero_processo)}')" 
+                 style="color: #2563eb; text-decoration: underline; cursor: pointer; white-space: nowrap;" 
+                 title="Clique para abrir diretamente no portal ${escapeHtml(p.sistema)}">
+                🔗 ${escapeHtml(p.numero_processo)}
+              </a>
+              <button class="btn-copy-mini" onclick="copiarTexto('${escapeHtml(p.numero_processo)}', this)" title="Copiar número do processo">
+                📋
+              </button>
+            </div>
           </td>
           ${celulaDesc}
           <td>${escapeHtml(p.local_atual || "-")}</td>
@@ -570,7 +723,7 @@ async function abrirHistoricoProcesso(procId) {
     const res = await fetch(`/api/processos/${procId}`);
     const json = await res.json();
     if (!json.success || !json.data) {
-      alert("Não foi possível carregar os detalhes do processo.");
+      showToast("Não foi possível carregar os detalhes do processo.", "erro");
       return;
     }
     const proc = json.data;
@@ -680,7 +833,7 @@ async function salvarProcesso(e) {
   const id = document.getElementById("formProcId").value;
   const numProc = document.getElementById("formNumero").value.trim();
   if (!numProc) {
-    alert("O Número do Processo é obrigatório.");
+    showToast("O Número do Processo é obrigatório.", "alerta");
     return;
   }
 
@@ -709,30 +862,39 @@ async function salvarProcesso(e) {
     if (json.success) {
       fecharModalProcesso();
       await carregarDados();
-      exibirToast(id ? `✓ Processo ${numProc} atualizado!` : `✓ Processo ${numProc} cadastrado!`);
+      showToast(id ? `✓ Processo ${numProc} atualizado com sucesso!` : `✓ Processo ${numProc} cadastrado com sucesso!`, "sucesso");
     } else {
-      alert("Erro ao salvar: " + json.error);
+      showToast("Erro ao salvar: " + json.error, "erro");
     }
   } catch (err) {
     console.error(err);
-    alert("Falha na requisição ao servidor.");
+    showToast("Falha na requisição ao servidor.", "erro");
   }
 }
 
 async function confirmarExclusao(id, numero) {
-  if (confirm(`Tem certeza que deseja excluir o processo "${numero}" e todo o seu histórico?`)) {
-    try {
-      const res = await fetch(`/api/processos/${id}`, { method: "DELETE" });
-      const json = await res.json();
-      if (json.success) {
-        carregarDados();
-      } else {
-        alert("Erro ao excluir: " + json.error);
+  mostrarConfirmacao({
+    titulo: "Excluir Processo",
+    mensagem: `Tem certeza que deseja excluir permanentemente o processo <strong>${escapeHtml(numero)}</strong> e todo o seu histórico?`,
+    icone: "🗑️",
+    textoConfirmar: "Sim, Excluir",
+    tipo: "danger",
+    aoConfirmar: async () => {
+      try {
+        const res = await fetch(`/api/processos/${id}`, { method: "DELETE" });
+        const json = await res.json();
+        if (json.success) {
+          showToast(`✓ Processo ${numero} excluído com sucesso!`, "sucesso");
+          carregarDados();
+        } else {
+          showToast("Erro ao excluir: " + json.error, "erro");
+        }
+      } catch (err) {
+        console.error(err);
+        showToast("Falha ao excluir o processo.", "erro");
       }
-    } catch (err) {
-      console.error(err);
     }
-  }
+  });
 }
 
 // -------------------------------------------------------------
@@ -752,21 +914,30 @@ async function atualizarStatusAgendador() {
 }
 
 async function dispararResumoAgora() {
-  if (!confirm("Deseja gerar e disparar o resumo diário dos processos da STI agora?")) return;
-  try {
-    const res = await fetch("/api/scheduler/disparar", { method: "POST" });
-    const json = await res.json();
-    if (json.success) {
-      alert("✓ Resumo gerado com sucesso!\n\nStatus: " + json.data.status);
-      atualizarStatusAgendador();
-      carregarHistoricoDisparos();
-    } else {
-      alert("Erro ao disparar resumo: " + json.error);
+  mostrarConfirmacao({
+    titulo: "Disparar Resumo STI",
+    mensagem: "Deseja gerar e disparar agora o resumo consolidado de processos da STI para os canais configurados?",
+    icone: "⚡",
+    textoConfirmar: "Disparar Agora",
+    tipo: "primary",
+    aoConfirmar: async () => {
+      showToast("Gerando e enviando resumo diário...", "info");
+      try {
+        const res = await fetch("/api/scheduler/disparar", { method: "POST" });
+        const json = await res.json();
+        if (json.success) {
+          showToast("✓ Resumo gerado e disparado com sucesso!", "sucesso");
+          atualizarStatusAgendador();
+          carregarHistoricoDisparos();
+        } else {
+          showToast("Erro ao disparar resumo: " + json.error, "erro");
+        }
+      } catch (err) {
+        console.error(err);
+        showToast("Erro ao comunicar com o agendador.", "erro");
+      }
     }
-  } catch (err) {
-    console.error(err);
-    alert("Erro ao comunicar com o agendador.");
-  }
+  });
 }
 
 async function verPreviewRelatorio() {
@@ -817,7 +988,7 @@ let cancelandoSincronizacao = false;
 async function sincronizarSistemasWeb() {
   const processosMonitorados = todosProcessos.filter(p => p.monitorar === 1 || p.monitorar === undefined);
   if (processosMonitorados.length === 0) {
-    alert("Não há processos com monitoramento ativo cadastrados.");
+    showToast("Não há processos com monitoramento ativo cadastrados.", "alerta");
     return;
   }
 
@@ -967,14 +1138,14 @@ async function sincronizarProcessoWeb(id) {
     const json = await res.json();
     if (json.sucesso) {
       const setor = json.dados ? json.dados.local_atual : "Portal Oficial";
-      exibirToast(`✓ Sincronizado com sucesso! Setor: ${setor}`);
+      showToast(`✓ Sincronizado com sucesso! Setor: ${setor}`, "sucesso");
       await carregarDados();
     } else {
-      alert("Aviso do portal: " + (json.mensagem || "Não foi possível sincronizar"));
+      showToast("Aviso do portal: " + (json.mensagem || "Não foi possível sincronizar"), "alerta");
     }
   } catch (err) {
     console.error(err);
-    alert("Erro de conexão ao sincronizar processo.");
+    showToast("Erro de conexão ao sincronizar processo.", "erro");
   } finally {
     if (targetBtn) {
       targetBtn.textContent = iconOriginal;
@@ -1009,7 +1180,7 @@ async function salvarNovoProjeto(e) {
   const descricao = document.getElementById("novoProjDescricao").value.trim();
 
   if (!nome) {
-    alert("O nome do projeto é obrigatório.");
+    showToast("O nome do projeto é obrigatório.", "alerta");
     return;
   }
 
@@ -1023,13 +1194,13 @@ async function salvarNovoProjeto(e) {
     if (json.success) {
       fecharModalNovoProjeto();
       await carregarDados();
-      exibirToast(`✓ Projeto "${nome}" cadastrado com sucesso!`);
+      showToast(`✓ Projeto "${nome}" cadastrado com sucesso!`, "sucesso");
     } else {
-      alert("Erro ao cadastrar projeto: " + json.error);
+      showToast("Erro ao cadastrar projeto: " + json.error, "erro");
     }
   } catch (err) {
     console.error(err);
-    alert("Erro na requisição ao salvar novo projeto.");
+    showToast("Erro na requisição ao salvar novo projeto.", "erro");
   }
 }
 
@@ -1042,7 +1213,7 @@ function abrirModalEditarProjeto(projId) {
   }
 
   if (!proj && todosProjetos.length === 0) {
-    alert("Nenhum projeto cadastrado ainda. Use 'Novo Projeto' para começar.");
+    showToast("Nenhum projeto cadastrado ainda. Use 'Novo Projeto' para começar.", "info");
     return;
   }
 
@@ -1094,11 +1265,11 @@ async function salvarProjetoEdicao(e) {
   const descricao = document.getElementById("editProjDescricao").value.trim();
 
   if (!projId) {
-    alert("Selecione um projeto para atualizar.");
+    showToast("Selecione um projeto para atualizar.", "alerta");
     return;
   }
   if (!nome) {
-    alert("O nome do projeto é obrigatório.");
+    showToast("O nome do projeto é obrigatório.", "alerta");
     return;
   }
 
@@ -1112,13 +1283,13 @@ async function salvarProjetoEdicao(e) {
     if (json.success) {
       fecharModalEditarProjeto();
       await carregarDados();
-      exibirToast(`✓ Projeto "${nome}" atualizado com sucesso!`);
+      showToast(`✓ Projeto "${nome}" atualizado com sucesso!`, "sucesso");
     } else {
-      alert("Erro ao salvar projeto: " + json.error);
+      showToast("Erro ao salvar projeto: " + json.error, "erro");
     }
   } catch (err) {
     console.error(err);
-    alert("Erro na requisição ao salvar projeto.");
+    showToast("Erro na requisição ao salvar projeto.", "erro");
   }
 }
 
@@ -1127,30 +1298,33 @@ async function excluirProjetoAtual() {
   const nome = document.getElementById("editProjNome").value;
 
   if (!projId) {
-    alert("Nenhum projeto selecionado para exclusão.");
+    showToast("Nenhum projeto selecionado para exclusão.", "alerta");
     return;
   }
 
-  if (!confirm(`Tem certeza que deseja excluir o projeto "${nome}"?\n\nATENÇÃO: Todos os processos vinculados a ele também serão excluídos!`)) {
-    return;
-  }
-
-  try {
-    const res = await fetch(`/api/projetos/${projId}`, {
-      method: "DELETE"
-    });
-    const json = await res.json();
-    if (json.success) {
-      fecharModalEditarProjeto();
-      await carregarDados();
-      exibirToast(`✓ Projeto "${nome}" e seus processos foram excluídos.`);
-    } else {
-      alert("Erro ao excluir projeto: " + json.error);
+  mostrarConfirmacao({
+    titulo: "Excluir Projeto e Processos",
+    mensagem: `Tem certeza que deseja excluir o projeto <strong>${escapeHtml(nome)}</strong>?<br><br><span style="color: #dc2626; font-weight: 700;">ATENÇÃO: Todos os processos vinculados a ele também serão excluídos permanentemente!</span>`,
+    icone: "⚠️",
+    textoConfirmar: "Sim, Excluir Projeto",
+    tipo: "danger",
+    aoConfirmar: async () => {
+      try {
+        const res = await fetch(`/api/projetos/${projId}`, { method: "DELETE" });
+        const json = await res.json();
+        if (json.success) {
+          fecharModalEditarProjeto();
+          await carregarDados();
+          showToast(`✓ Projeto "${nome}" e seus processos foram excluídos.`, "sucesso");
+        } else {
+          showToast("Erro ao excluir projeto: " + json.error, "erro");
+        }
+      } catch (err) {
+        console.error(err);
+        showToast("Erro na requisição ao excluir projeto.", "erro");
+      }
     }
-  } catch (err) {
-    console.error(err);
-    alert("Erro na requisição ao excluir projeto.");
-  }
+  });
 }
 
 // -------------------------------------------------------------
@@ -1251,13 +1425,13 @@ async function testarConectividadeRobos() {
         }
       }
 
-      exibirToast("✓ Teste de conexão concluído!");
+      showToast("✓ Teste de conexão concluído!", "sucesso");
     } else {
-      alert("Erro ao testar: " + (json.error || "Sem resposta"));
+      showToast("Erro ao testar robôs: " + (json.error || "Sem resposta"), "erro");
     }
   } catch (err) {
     console.error(err);
-    alert("Falha de conexão com o servidor ao testar robôs.");
+    showToast("Falha de conexão com o servidor ao testar robôs.", "erro");
   } finally {
     btn.innerHTML = origHtml;
     btn.disabled = false;
@@ -1317,13 +1491,21 @@ function abrirProcessoExterno(sistema, numero) {
 }
 
 async function fazerLogout() {
-  if (!confirm("Deseja realmente sair do painel STI?")) return;
-  try {
-    await fetch("/api/auth/logout", { method: "POST" });
-  } catch (e) {}
-  localStorage.removeItem("sti_token");
-  localStorage.removeItem("sti_user");
-  window.location.href = "/login.html";
+  mostrarConfirmacao({
+    titulo: "Encerrar Sessão",
+    mensagem: "Deseja realmente sair do painel de monitoramento STI?",
+    icone: "🚪",
+    textoConfirmar: "Sim, Sair",
+    tipo: "danger",
+    aoConfirmar: async () => {
+      try {
+        await fetch("/api/auth/logout", { method: "POST" });
+      } catch (e) {}
+      localStorage.removeItem("sti_token");
+      localStorage.removeItem("sti_user");
+      window.location.href = "/login.html";
+    }
+  });
 }
 
 // -------------------------------------------------------------
@@ -1495,60 +1677,75 @@ async function salvarUsuario(e) {
     });
     const json = await res.json();
     if (json.success) {
-      exibirToast(id ? "✓ Usuário atualizado com sucesso!" : `✓ Usuário ${usuario} cadastrado!`);
+      showToast(id ? "✓ Usuário atualizado com sucesso!" : `✓ Usuário ${usuario} cadastrado!`, "sucesso");
       cancelarEdicaoUsuario();
       await carregarUsuarios();
     } else {
-      alert("Erro: " + json.error);
+      showToast("Erro: " + json.error, "erro");
     }
   } catch (err) {
-    alert("Falha de conexão ao salvar usuário.");
+    showToast("Falha de conexão ao salvar usuário.", "erro");
   }
 }
 
 async function alternarAtivoUsuario(id, statusAtual) {
   const novoStatus = statusAtual === 1 ? 0 : 1;
   const acaoTexto = novoStatus === 1 ? "ativar" : "desativar";
-  if (!confirm(`Deseja realmente ${acaoTexto} este usuário?`)) return;
-
   const u = usuariosCache.find(x => x.id === id);
   if (!u) return;
 
-  try {
-    const res = await fetch(`/api/usuarios/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome: u.nome, perfil: u.perfil, ativo: novoStatus })
-    });
-    const json = await res.json();
-    if (json.success) {
-      exibirToast(`✓ Usuário ${novoStatus === 1 ? 'ativado' : 'desativado'} com sucesso!`);
-      await carregarUsuarios();
-    } else {
-      alert("Erro ao alterar status: " + json.error);
+  mostrarConfirmacao({
+    titulo: `${novoStatus === 1 ? 'Ativar' : 'Desativar'} Usuário`,
+    mensagem: `Deseja realmente ${acaoTexto} o acesso do usuário <strong>${escapeHtml(u.usuario)}</strong>?`,
+    icone: novoStatus === 1 ? "▶" : "⏸",
+    textoConfirmar: `Sim, ${acaoTexto}`,
+    tipo: novoStatus === 1 ? "primary" : "danger",
+    aoConfirmar: async () => {
+      try {
+        const res = await fetch(`/api/usuarios/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nome: u.nome, perfil: u.perfil, ativo: novoStatus })
+        });
+        const json = await res.json();
+        if (json.success) {
+          showToast(`✓ Usuário ${novoStatus === 1 ? 'ativado' : 'desativado'} com sucesso!`, "sucesso");
+          await carregarUsuarios();
+        } else {
+          showToast("Erro ao alterar status: " + json.error, "erro");
+        }
+      } catch (err) {
+        showToast("Falha ao comunicar com o servidor.", "erro");
+      }
     }
-  } catch (err) {
-    alert("Falha ao comunicar com o servidor.");
-  }
+  });
 }
 
 async function excluirUsuario(id) {
   const u = usuariosCache.find(x => x.id === id);
   if (!u) return;
-  if (!confirm(`Tem certeza absoluta que deseja remover o usuário '${u.usuario}'? Essa ação não pode ser desfeita.`)) return;
 
-  try {
-    const res = await fetch(`/api/usuarios/${id}`, { method: "DELETE" });
-    const json = await res.json();
-    if (json.success) {
-      exibirToast(`✓ Usuário ${u.usuario} excluído!`);
-      await carregarUsuarios();
-    } else {
-      alert("Erro ao excluir: " + json.error);
+  mostrarConfirmacao({
+    titulo: "Remover Usuário",
+    mensagem: `Tem certeza absoluta que deseja remover o usuário <strong>${escapeHtml(u.usuario)}</strong>?<br><span style="color: #dc2626; font-size: 11.5px;">Essa ação não pode ser desfeita.</span>`,
+    icone: "🗑️",
+    textoConfirmar: "Sim, Remover Usuário",
+    tipo: "danger",
+    aoConfirmar: async () => {
+      try {
+        const res = await fetch(`/api/usuarios/${id}`, { method: "DELETE" });
+        const json = await res.json();
+        if (json.success) {
+          showToast(`✓ Usuário ${u.usuario} removido com sucesso!`, "sucesso");
+          await carregarUsuarios();
+        } else {
+          showToast("Erro ao excluir: " + json.error, "erro");
+        }
+      } catch (err) {
+        showToast("Falha ao comunicar com o servidor.", "erro");
+      }
     }
-  } catch (err) {
-    alert("Falha ao comunicar com o servidor.");
-  }
+  });
 }
 
 async function carregarLogsAuditoria() {

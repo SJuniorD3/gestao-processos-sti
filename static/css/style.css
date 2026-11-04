@@ -1272,3 +1272,144 @@ body {
     margin: 10mm 12mm 12mm 12mm;
   }
 }
+
+/* ==========================================================================
+   MICRO-INTERAÇÕES & REFINAMENTO VISUAL (UX PRO V3.0)
+   ========================================================================== */
+
+/* Feedback Tátil nos Botões */
+.btn:active, .view-btn:active, .btn-icon-action:active, .btn-status-4:active {
+  transform: scale(0.97);
+}
+
+/* Micro-elevação suave em cards */
+.kpi-card {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.06), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+}
+
+.project-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.project-card:hover {
+  box-shadow: 0 10px 20px -5px rgba(0, 0, 0, 0.08);
+}
+
+/* Botão de Cópia Rápida com Micro-interação */
+.btn-copy-mini {
+  background: transparent;
+  border: none;
+  font-size: 11px;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-copy-mini:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+.btn-copy-mini:active {
+  transform: scale(0.9);
+}
+
+/* Skeleton Screens Shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-box {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.skeleton-row td {
+  padding: 12px 10px !important;
+}
+
+/* Container de Toast Notifications */
+.toast-container {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 999999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 380px;
+  pointer-events: none;
+}
+
+.sti-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e2e8f0;
+  font-size: 13px;
+  color: #0f172a;
+  animation: toastSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: all 0.3s ease;
+}
+
+.sti-toast.toast-sucesso { border-left: 4px solid #16a34a; }
+.sti-toast.toast-erro { border-left: 4px solid #ef4444; }
+.sti-toast.toast-alerta { border-left: 4px solid #f59e0b; }
+.sti-toast.toast-info { border-left: 4px solid #2563eb; }
+
+.sti-toast .toast-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.sti-toast .toast-msg {
+  flex: 1;
+  line-height: 1.4;
+  word-break: break-word;
+}
+.sti-toast .toast-close {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+.sti-toast .toast-close:hover {
+  color: #0f172a;
+}
+
+@keyframes toastSlideIn {
+  from { opacity: 0; transform: translateX(40px) scale(0.95); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+@keyframes toastSlideOut {
+  from { opacity: 1; transform: translateX(0) scale(1); }
+  to { opacity: 0; transform: translateX(40px) scale(0.95); }
+}
+
+@media (max-width: 480px) {
+  .toast-container {
+    top: 16px;
+    right: 16px;
+    left: 16px;
+    max-width: none;
+  }
+}
