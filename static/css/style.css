@@ -123,6 +123,16 @@ body {
   100% { transform: scale(0.95); opacity: 0.8; }
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.icon-sync-spin {
+  display: inline-block;
+  animation: spin 1.2s linear infinite;
+}
+
 .pill-label {
   display: block;
   font-size: 12px;

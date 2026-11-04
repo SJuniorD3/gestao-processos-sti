@@ -750,36 +750,175 @@ async function carregarHistoricoDisparos() {
   }
 }
 
+let cancelandoSincronizacao = false;
+
 async function sincronizarSistemasWeb() {
-  if (!confirm("Deseja iniciar o robô de monitoramento e consultar todos os processos cadastrados no SEI e STARTGOV agora?")) return;
-  try {
-    const res = await fetch("/api/monitoramento/executar", { method: "POST" });
-    const json = await res.json();
-    if (json.success) {
-      alert(`✓ Sincronização concluída!\n\nProcessos verificados: ${json.data.total_verificados}\nAtualizados: ${json.data.total_atualizados}`);
-      carregarDados();
-    } else {
-      alert("Erro na sincronização: " + json.error);
+  const processosMonitorados = todosProcessos.filter(p => p.monitorar === 1 || p.monitorar === undefined);
+  if (processosMonitorados.length === 0) {
+    alert("Não há processos com monitoramento ativo cadastrados.");
+    return;
+  }
+
+  cancelandoSincronizacao = false;
+  const modal = document.getElementById("modalSincronizacao");
+  const tabelaFeed = document.getElementById("syncTabelaFeed");
+  const pBar = document.getElementById("syncProgressBar");
+  const pTexto = document.getElementById("syncPorcentagem");
+  const statusTexto = document.getElementById("syncStatusTexto");
+  const subTexto = document.getElementById("syncModalSubtitle");
+  const spinIcon = document.getElementById("syncSpinIcon");
+  const btnFecharTop = document.getElementById("btnFecharSyncTop");
+  const btnCancelar = document.getElementById("btnCancelarSync");
+  const btnConcluir = document.getElementById("btnConcluirSync");
+  const resumoFinal = document.getElementById("syncResumoFinal");
+
+  // Reset visual do modal
+  tabelaFeed.innerHTML = "";
+  pBar.style.width = "0%";
+  pTexto.textContent = "0%";
+  statusTexto.textContent = `Iniciando consulta de ${processosMonitorados.length} processo(s)...`;
+  subTexto.textContent = "Consultando portais e capturando andamentos oficiais...";
+  spinIcon.className = "icon-sync-spin";
+  btnFecharTop.disabled = true;
+  btnCancelar.style.display = "inline-flex";
+  btnCancelar.disabled = false;
+  btnCancelar.textContent = "Parar Sincronização";
+  btnConcluir.style.display = "none";
+  resumoFinal.textContent = `Total a verificar: ${processosMonitorados.length}`;
+  modal.style.display = "flex";
+
+  let sucessoCount = 0;
+  let falhaCount = 0;
+
+  for (let i = 0; i < processosMonitorados.length; i++) {
+    if (cancelandoSincronizacao) {
+      statusTexto.textContent = `Sincronização pausada pelo usuário (${i}/${processosMonitorados.length}).`;
+      break;
     }
-  } catch (err) {
-    console.error(err);
-    alert("Falha ao comunicar com o servidor.");
+
+    const proc = processosMonitorados[i];
+    const pct = Math.round(((i + 1) / processosMonitorados.length) * 100);
+    statusTexto.textContent = `Consultando [${i + 1}/${processosMonitorados.length}]: ${proc.numero_processo} (${proc.sistema})...`;
+    pBar.style.width = `${pct}%`;
+    pTexto.textContent = `${pct}%`;
+
+    // Cria linha no feed em estado de carregamento
+    const rowId = `sync-row-${proc.id}`;
+    const row = document.createElement("tr");
+    row.id = rowId;
+    row.style.borderBottom = "1px solid #f1f5f9";
+    row.innerHTML = `
+      <td style="padding: 9px 12px; font-weight: 700;">${escapeHtml(proc.sistema)}</td>
+      <td style="padding: 9px 12px; font-family: monospace; font-weight: 600;">${escapeHtml(proc.numero_processo)}</td>
+      <td style="padding: 9px 12px;"><span style="background: #fef3c7; color: #92400e; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600;">⏳ Consultando...</span></td>
+      <td style="padding: 9px 12px; color: #64748b;">Acessando portal oficial...</td>
+    `;
+    tabelaFeed.prepend(row);
+
+    try {
+      const res = await fetch(`/api/monitoramento/processo/${proc.id}`, { method: "POST" });
+      const json = await res.json();
+      const updatedRow = document.getElementById(rowId);
+
+      if (json.sucesso) {
+        sucessoCount++;
+        const setor = json.dados ? (json.dados.local_atual || "Atualizado") : "Atualizado";
+        const andamentos = json.andamentos_capturados ? ` (${json.andamentos_capturados} andamentos)` : "";
+        if (updatedRow) {
+          updatedRow.innerHTML = `
+            <td style="padding: 9px 12px; font-weight: 700;">${escapeHtml(proc.sistema)}</td>
+            <td style="padding: 9px 12px; font-family: monospace; font-weight: 600; color: #1e3a8a;">${escapeHtml(proc.numero_processo)}</td>
+            <td style="padding: 9px 12px;"><span style="background: #dcfce7; color: #15803d; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 700;">✓ Atualizado</span></td>
+            <td style="padding: 9px 12px; color: #1e293b;"><strong>${escapeHtml(setor)}</strong><span style="font-size: 11px; color: #64748b;">${andamentos}</span></td>
+          `;
+        }
+      } else {
+        falhaCount++;
+        const motivo = json.mensagem || "Não foi possível extrair dados";
+        if (updatedRow) {
+          updatedRow.innerHTML = `
+            <td style="padding: 9px 12px; font-weight: 700;">${escapeHtml(proc.sistema)}</td>
+            <td style="padding: 9px 12px; font-family: monospace; font-weight: 600; color: #475569;">${escapeHtml(proc.numero_processo)}</td>
+            <td style="padding: 9px 12px;"><span style="background: #fee2e2; color: #b91c1c; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 700;">⚠️ Falha</span></td>
+            <td style="padding: 9px 12px; color: #ef4444; font-size: 11.5px;">${escapeHtml(motivo)}</td>
+          `;
+        }
+      }
+    } catch (err) {
+      falhaCount++;
+      const updatedRow = document.getElementById(rowId);
+      if (updatedRow) {
+        updatedRow.innerHTML = `
+          <td style="padding: 9px 12px; font-weight: 700;">${escapeHtml(proc.sistema)}</td>
+          <td style="padding: 9px 12px; font-family: monospace;">${escapeHtml(proc.numero_processo)}</td>
+          <td style="padding: 9px 12px;"><span style="background: #fee2e2; color: #b91c1c; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 700;">⚠️ Erro</span></td>
+          <td style="padding: 9px 12px; color: #ef4444; font-size: 11.5px;">Falha de comunicação com o servidor</td>
+        `;
+      }
+    }
+
+    resumoFinal.innerHTML = `Sucessos: <strong style="color: #15803d;">${sucessoCount}</strong> • Falhas/Sem resposta: <strong style="color: #b91c1c;">${falhaCount}</strong>`;
+  }
+
+  // Finalização da Sincronização
+  spinIcon.className = "";
+  btnFecharTop.disabled = false;
+  btnCancelar.style.display = "none";
+  btnConcluir.style.display = "inline-flex";
+  statusTexto.textContent = cancelandoSincronizacao
+    ? "Sincronização pausada."
+    : `✓ Concluído! ${sucessoCount} processo(s) atualizados com sucesso.`;
+  pBar.style.width = "100%";
+  pTexto.textContent = "100%";
+
+  exibirToast(`✓ Sincronização concluída: ${sucessoCount} atualizados.`);
+}
+
+function cancelarSincronizacao() {
+  cancelandoSincronizacao = true;
+  const btn = document.getElementById("btnCancelarSync");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Parando...";
   }
 }
 
+function fecharModalSincronizacao() {
+  document.getElementById("modalSincronizacao").style.display = "none";
+  carregarDados();
+}
+
 async function sincronizarProcessoWeb(id) {
+  let targetBtn = null;
+  if (window.event && window.event.target) {
+    targetBtn = window.event.target.closest("button");
+  }
+  const iconOriginal = targetBtn ? targetBtn.textContent : "🔄";
+  if (targetBtn) {
+    targetBtn.textContent = "⏳";
+    targetBtn.disabled = true;
+    targetBtn.style.opacity = "0.6";
+  }
+
   try {
     const res = await fetch(`/api/monitoramento/processo/${id}`, { method: "POST" });
     const json = await res.json();
     if (json.sucesso) {
-      alert("✓ Processo sincronizado com sucesso via portal oficial!");
-      carregarDados();
+      const setor = json.dados ? json.dados.local_atual : "Portal Oficial";
+      exibirToast(`✓ Sincronizado com sucesso! Setor: ${setor}`);
+      await carregarDados();
     } else {
       alert("Aviso do portal: " + (json.mensagem || "Não foi possível sincronizar"));
     }
   } catch (err) {
     console.error(err);
-    alert("Erro ao sincronizar processo.");
+    alert("Erro de conexão ao sincronizar processo.");
+  } finally {
+    if (targetBtn) {
+      targetBtn.textContent = iconOriginal;
+      targetBtn.disabled = false;
+      targetBtn.style.opacity = "1";
+    }
   }
 }
 
@@ -955,8 +1094,112 @@ async function excluirProjetoAtual() {
 // -------------------------------------------------------------
 // SISTEMAS E EXPORTAÇÃO
 // -------------------------------------------------------------
-function abrirModalSistemas() {
+async function abrirModalSistemas() {
   document.getElementById("modalSistemas").style.display = "flex";
+  await carregarStatusSistemas();
+}
+
+async function carregarStatusSistemas() {
+  try {
+    const res = await fetch("/api/sistemas");
+    const json = await res.json();
+    if (json.success && json.data) {
+      const sei = json.data.sei || {};
+      const start = json.data.startgov || {};
+
+      const bSei = document.getElementById("badgeStatusSEI");
+      const uSei = document.getElementById("txtUserSEI");
+      if (bSei && uSei) {
+        if (sei.configurado) {
+          bSei.textContent = "✓ Configurado";
+          bSei.style.background = "#dcfce7";
+          bSei.style.color = "#15803d";
+          uSei.textContent = sei.usuario ? sei.usuario.replace(/(.{2}).*(.{2})/, "$1***$2") : "Configurado via ambiente";
+        } else {
+          bSei.textContent = "⚠️ Não Configurado";
+          bSei.style.background = "#fee2e2";
+          bSei.style.color = "#b91c1c";
+          uSei.textContent = "Variáveis SEI_USER/SEI_PASS ausentes";
+        }
+      }
+
+      const bStart = document.getElementById("badgeStatusStartGov");
+      const uStart = document.getElementById("txtUserStartGov");
+      if (bStart && uStart) {
+        if (start.configurado) {
+          bStart.textContent = "✓ Configurado";
+          bStart.style.background = "#dcfce7";
+          bStart.style.color = "#15803d";
+          uStart.textContent = start.usuario ? start.usuario.replace(/(\d{3})\d{6}(\d{2})/, "$1.***.***-$2") : "Configurado via ambiente";
+        } else {
+          bStart.textContent = "⚠️ Não Configurado";
+          bStart.style.background = "#fee2e2";
+          bStart.style.color = "#b91c1c";
+          uStart.textContent = "Variáveis STARTGOV_USER/STARTGOV_PASS ausentes";
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Erro ao obter status dos sistemas:", err);
+  }
+}
+
+async function testarConectividadeRobos() {
+  const btn = document.getElementById("btnTestarPortais");
+  const origHtml = btn.innerHTML;
+  btn.innerHTML = '<span class="icon-sync-spin">🔄</span> Testando autenticação...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch("/api/sistemas/testar", { method: "POST" });
+    const json = await res.json();
+    if (json.success && json.data) {
+      const sei = json.data.sei || {};
+      const start = json.data.startgov || {};
+
+      const bSei = document.getElementById("badgeStatusSEI");
+      const mSei = document.getElementById("msgDiagSEI");
+      if (bSei && mSei) {
+        if (sei.sucesso) {
+          bSei.textContent = "🟢 Autenticado (OK)";
+          bSei.style.background = "#dcfce7";
+          bSei.style.color = "#15803d";
+          mSei.innerHTML = `<span style="color: #15803d; font-weight: 600;">✓ Conexão bem-sucedida: ${escapeHtml(sei.mensagem)}</span>`;
+        } else {
+          bSei.textContent = "🔴 Falha no Login";
+          bSei.style.background = "#fee2e2";
+          bSei.style.color = "#b91c1c";
+          mSei.innerHTML = `<span style="color: #b91c1c;">⚠️ ${escapeHtml(sei.mensagem)}</span>`;
+        }
+      }
+
+      const bStart = document.getElementById("badgeStatusStartGov");
+      const mStart = document.getElementById("msgDiagStartGov");
+      if (bStart && mStart) {
+        if (start.sucesso) {
+          bStart.textContent = "🟢 Autenticado (OK)";
+          bStart.style.background = "#dcfce7";
+          bStart.style.color = "#15803d";
+          mStart.innerHTML = `<span style="color: #15803d; font-weight: 600;">✓ Conexão bem-sucedida: ${escapeHtml(start.mensagem)}</span>`;
+        } else {
+          bStart.textContent = "🔴 Falha no Login";
+          bStart.style.background = "#fee2e2";
+          bStart.style.color = "#b91c1c";
+          mStart.innerHTML = `<span style="color: #b91c1c;">⚠️ ${escapeHtml(start.mensagem)}</span>`;
+        }
+      }
+
+      exibirToast("✓ Teste de conexão concluído!");
+    } else {
+      alert("Erro ao testar: " + (json.error || "Sem resposta"));
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Falha de conexão com o servidor ao testar robôs.");
+  } finally {
+    btn.innerHTML = origHtml;
+    btn.disabled = false;
+  }
 }
 
 function fecharModalSistemas() {

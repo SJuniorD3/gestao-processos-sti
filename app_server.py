@@ -339,6 +339,37 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json({"success": False, "error": str(e)}, 500)
             return
 
+        # Testar Credenciais e Conexão dos Robôs SEI e STARTGOV
+        if path == "/api/sistemas/testar":
+            try:
+                res_sei = {}
+                res_startgov = {}
+
+                # Teste SEI
+                if sei_client.username and sei_client.password:
+                    ok_sei, msg_sei = sei_client.autenticar(forcar=True)
+                    res_sei = {"configurado": True, "sucesso": ok_sei, "mensagem": msg_sei}
+                else:
+                    res_sei = {"configurado": False, "sucesso": False, "mensagem": "Variáveis SEI_USER ou SEI_PASS não preenchidas no ambiente."}
+
+                # Teste StartGov
+                if startgov_client.username and startgov_client.password:
+                    ok_start, msg_start = startgov_client.autenticar(forcar=True)
+                    res_startgov = {"configurado": True, "sucesso": ok_start, "mensagem": msg_start}
+                else:
+                    res_startgov = {"configurado": False, "sucesso": False, "mensagem": "Variáveis STARTGOV_USER ou STARTGOV_PASS não preenchidas no ambiente."}
+
+                self._send_json({
+                    "success": True,
+                    "data": {
+                        "sei": res_sei,
+                        "startgov": res_startgov
+                    }
+                })
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 500)
+            return
+
         self._send_json({"success": False, "error": "Rota POST não encontrada"}, 404)
 
     def do_PUT(self):

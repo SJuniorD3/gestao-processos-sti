@@ -130,6 +130,11 @@ def monitorar_processo_individual(processo_id):
         else:
             atualizar_processo(proc["id"], dados_atualizados, registrar_novo_status=True)
 
-        return {"sucesso": True, "mensagem": "Processo atualizado com sucesso via portal oficial!", "dados": dados_atualizados}
+        return {
+            "sucesso": True,
+            "mensagem": "Processo atualizado com sucesso via portal oficial!",
+            "dados": dados_atualizados,
+            "andamentos_capturados": len(res.get("historico_4_linhas", []))
+        }
     else:
         return {"sucesso": False, "mensagem": res.get("mensagem", "Não foi possível extrair dados.")}
