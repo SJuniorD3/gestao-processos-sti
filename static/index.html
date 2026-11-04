@@ -38,11 +38,14 @@
         <button class="btn btn-primary" onclick="abrirModalNovoProcesso()">
           <span class="icon">➕</span> Novo Processo
         </button>
-        <button class="btn btn-secondary" onclick="sincronizarSistemasWeb()" title="Consultar portais oficiais">
-          <span class="icon">🔄</span> Sincronizar
+        <button class="btn btn-secondary" onclick="abrirModalNovoProjeto()">
+          <span class="icon">📁</span> Novo Projeto
         </button>
         <button class="btn btn-outline" onclick="abrirModalEditarProjeto()">
           <span class="icon">✏️</span> Projetos
+        </button>
+        <button class="btn btn-secondary" onclick="sincronizarSistemasWeb()" title="Consultar portais oficiais">
+          <span class="icon">🔄</span> Sincronizar
         </button>
         <button class="btn btn-outline" onclick="abrirModalSistemas()">
           <span class="icon">🔑</span> Portais
@@ -225,7 +228,7 @@
 
   </main>
 
-  <!-- MODAL: NOVO / EDITAR PROCESSO -->
+  <!-- MODAL: CADASTRAR NOVO PROCESSO -->
   <div class="modal-overlay" id="modalProcesso">
     <div class="modal-content">
       <div class="modal-header">
@@ -237,7 +240,8 @@
         <div class="form-row">
           <div class="form-group col-6">
             <label for="formProjeto">Nome do Projeto *</label>
-            <input type="text" id="formProjeto" required placeholder="Ex: DUARTE JR, PROTOCOLO">
+            <input type="text" id="formProjeto" list="listaProjetosDatalist" required placeholder="Digite ou selecione o projeto...">
+            <datalist id="listaProjetosDatalist"></datalist>
           </div>
           <div class="form-group col-6">
             <label for="formSistema">Sistema Oficial *</label>
@@ -295,22 +299,55 @@
     </div>
   </div>
 
-  <!-- MODAL: EDITAR PROJETO -->
+  <!-- MODAL: CADASTRAR NOVO PROJETO (DEDICADO) -->
+  <div class="modal-overlay" id="modalNovoProjeto">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Cadastrar Novo Projeto</h2>
+        <button class="btn-close" onclick="fecharModalNovoProjeto()">&times;</button>
+      </div>
+      <form id="formNovoProjeto" onsubmit="salvarNovoProjeto(event)">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="novoProjNome">Nome do Projeto *</label>
+            <input type="text" id="novoProjNome" required placeholder="Ex: PROTOCOLO WEB, DUARTE JR">
+          </div>
+          <div class="form-group">
+            <label for="novoProjDescricao">Descrição / Objeto do Projeto</label>
+            <textarea id="novoProjDescricao" rows="3" placeholder="Descreva o escopo, valor ou objetivo deste projeto..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" onclick="fecharModalNovoProjeto()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Cadastrar Projeto</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: EDITAR / GERENCIAR DADOS DO PROJETO -->
   <div class="modal-overlay" id="modalEditarProjeto">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>Editar Dados do Projeto</h2>
+        <h2 id="modalProjetoTitle">Gerenciar Projeto</h2>
         <button class="btn-close" onclick="fecharModalEditarProjeto()">&times;</button>
       </div>
       <form id="formEditarProjeto" onsubmit="salvarProjetoEdicao(event)">
-        <input type="hidden" id="editProjId">
-        <div class="form-group">
-          <label for="editProjNome">Nome do Projeto *</label>
-          <input type="text" id="editProjNome" required placeholder="Ex: DUARTE JR">
-        </div>
-        <div class="form-group">
-          <label for="editProjDescricao">Descrição / Objeto do Projeto</label>
-          <textarea id="editProjDescricao" rows="4" placeholder="Descreva o objeto compartilhado por todos os processos deste projeto..."></textarea>
+        <div class="modal-body">
+          <div class="form-group" id="grupoSelecionarProjeto">
+            <label for="editProjSelect">Selecione o Projeto para Editar</label>
+            <select id="editProjSelect" class="filter-select" style="width: 100%; padding: 8px 12px;" onchange="selecionarProjetoParaEditar(this.value)"></select>
+          </div>
+          <input type="hidden" id="editProjId">
+          <div class="form-group">
+            <label for="editProjNome">Nome do Projeto *</label>
+            <input type="text" id="editProjNome" required placeholder="Ex: DUARTE JR">
+          </div>
+          <div class="form-group">
+            <label for="editProjDescricao">Descrição / Objeto do Projeto</label>
+            <textarea id="editProjDescricao" rows="4" placeholder="Descreva o objeto compartilhado por todos os processos deste projeto..."></textarea>
+          </div>
+          <p id="editProjProcessosInfo" style="font-size: 12px; color: #64748b; background: #f8fafc; padding: 10px 14px; border-radius: 8px; border: 1px solid #e2e8f0; margin-top: 8px;"></p>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-danger" style="margin-right: auto;" onclick="excluirProjetoAtual()">Excluir Projeto</button>

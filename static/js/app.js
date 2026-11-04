@@ -54,6 +54,7 @@ async function carregarDados() {
       });
 
       popularSelectLocais(Array.from(locaisSet).sort());
+      popularSelectProjetos(todosProjetos);
       projetosFiltradosCache = todosProjetos;
       renderizarTabela(todosProjetos);
       renderizarTimelineVisual(todosProjetos);
@@ -79,6 +80,18 @@ function popularSelectLocais(locais) {
     if (loc === valorAtual) opt.selected = true;
     sel.appendChild(opt);
   });
+}
+
+function popularSelectProjetos(projetos) {
+  const datalist = document.getElementById("listaProjetosDatalist");
+  if (datalist) {
+    datalist.innerHTML = projetos.map(p => `<option value="${escapeHtml(p.nome)}">`).join("");
+  }
+  const select = document.getElementById("editProjSelect");
+  if (select) {
+    select.innerHTML = '<option value="">-- Selecione um projeto para editar --</option>' +
+      projetos.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${(p.processos || []).length} processos)</option>`).join("");
+  }
 }
 
 function alternarModoVisualizacao(modo) {
@@ -545,11 +558,14 @@ function fecharModalHistorico() {
 // CADASTRO / EDIÇÃO DE PROCESSO
 // -------------------------------------------------------------
 function abrirModalNovoProcesso() {
-  document.getElementById("formProcessoTitulo").textContent = "Cadastrar Novo Processo para Monitoramento";
+  const tituloEl = document.getElementById("modalProcessoTitulo");
+  if (tituloEl) tituloEl.textContent = "Cadastrar Novo Processo para Monitoramento";
   document.getElementById("formProcesso").reset();
   document.getElementById("formProcId").value = "";
-  document.getElementById("formDataRecebimento").value = new Date().toISOString().split("T")[0];
-  document.getElementById("formMonitorar").checked = true;
+  const dtEl = document.getElementById("formDataRec");
+  if (dtEl) dtEl.value = new Date().toISOString().split("T")[0];
+  const monEl = document.getElementById("formMonitorar");
+  if (monEl) monEl.checked = true;
   document.getElementById("modalProcesso").style.display = "flex";
 }
 
@@ -560,7 +576,8 @@ async function abrirModalEditarProcesso(procId) {
     if (!json.success || !json.data) return;
 
     const p = json.data;
-    document.getElementById("formProcessoTitulo").textContent = "Editar Processo / Atualizar Trâmite";
+    const tituloEl = document.getElementById("modalProcessoTitulo");
+    if (tituloEl) tituloEl.textContent = "Editar Processo / Atualizar Trâmite";
     document.getElementById("formProcId").value = p.id;
     document.getElementById("formProjeto").value = p.projeto || "";
     document.getElementById("formSistema").value = p.sistema || "SEI";
@@ -569,17 +586,22 @@ async function abrirModalEditarProcesso(procId) {
     document.getElementById("formLocal").value = p.local_atual || "";
     document.getElementById("formAcao").value = p.acao || "";
     document.getElementById("formSituacao").value = p.situacao || "";
-    if (p.data_recebimento) {
-      if (/^\d{2}\/\d{2}\/\d{4}$/.test(p.data_recebimento)) {
-        const [d, m, a] = p.data_recebimento.split("/");
-        document.getElementById("formDataRecebimento").value = `${a}-${m}-${d}`;
+    
+    const dtEl = document.getElementById("formDataRec");
+    if (dtEl) {
+      if (p.data_recebimento) {
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(p.data_recebimento)) {
+          const [d, m, a] = p.data_recebimento.split("/");
+          dtEl.value = `${a}-${m}-${d}`;
+        } else {
+          dtEl.value = p.data_recebimento;
+        }
       } else {
-        document.getElementById("formDataRecebimento").value = p.data_recebimento;
+        dtEl.value = "";
       }
-    } else {
-      document.getElementById("formDataRecebimento").value = "";
     }
-    document.getElementById("formMonitorar").checked = (p.monitorar === 1 || p.monitorar === undefined);
+    const monEl = document.getElementById("formMonitorar");
+    if (monEl) monEl.checked = (p.monitorar === 1 || p.monitorar === undefined);
 
     document.getElementById("modalProcesso").style.display = "flex";
   } catch (err) {
@@ -600,6 +622,7 @@ async function salvarProcesso(e) {
     return;
   }
 
+  const dtEl = document.getElementById("formDataRec");
   const dados = {
     projeto: document.getElementById("formProjeto").value.trim() || "STI",
     sistema: document.getElementById("formSistema").value.trim() || "SEI",
@@ -608,7 +631,7 @@ async function salvarProcesso(e) {
     local_atual: document.getElementById("formLocal").value.trim(),
     acao: document.getElementById("formAcao").value.trim(),
     situacao: document.getElementById("formSituacao").value.trim(),
-    data_recebimento: document.getElementById("formDataRecebimento").value,
+    data_recebimento: dtEl ? dtEl.value : "",
     monitorar: document.getElementById("formMonitorar").checked ? 1 : 0
   };
 
@@ -623,8 +646,16 @@ async function salvarProcesso(e) {
     const json = await res.json();
     if (json.success) {
       fecharModalProcesso();
-      carregarDados();
+      await carregarDados();
+      exibirToast(id ? `✓ Processo ${numProc} atualizado!` : `✓ Processo ${numProc} cadastrado!`);
     } else {
+      alert("Erro ao salvar: " + json.error);
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Falha na requisição ao servidor.");
+  }
+}
       alert("Erro ao salvar: " + json.error);
     }
   } catch (err) {
@@ -760,43 +791,118 @@ async function sincronizarProcessoWeb(id) {
 }
 
 // -------------------------------------------------------------
-// GESTÃO E EDIÇÃO DE PROJETOS
+// GESTÃO, CADASTRO E EDIÇÃO DE PROJETOS
 // -------------------------------------------------------------
-function abrirModalEditarProjeto(projId) {
-  let proj = null;
-  if (!projId && todosProjetos.length > 0) {
-    proj = todosProjetos[0];
-  } else if (projId) {
-    proj = todosProjetos.find(p => p.id === projId);
-  }
+function abrirModalNovoProjeto() {
+  const form = document.getElementById("formNovoProjeto");
+  if (form) form.reset();
+  const modal = document.getElementById("modalNovoProjeto");
+  if (modal) modal.style.display = "flex";
+  setTimeout(() => {
+    const el = document.getElementById("novoProjNome");
+    if (el) el.focus();
+  }, 50);
+}
 
-  if (!proj) {
-    alert("Nenhum projeto encontrado para edição.");
+function fecharModalNovoProjeto() {
+  const modal = document.getElementById("modalNovoProjeto");
+  if (modal) modal.style.display = "none";
+}
+
+async function salvarNovoProjeto(e) {
+  e.preventDefault();
+  const nome = document.getElementById("novoProjNome").value.trim();
+  const descricao = document.getElementById("novoProjDescricao").value.trim();
+
+  if (!nome) {
+    alert("O nome do projeto é obrigatório.");
     return;
   }
 
-  document.getElementById("editProjetoId").value = proj.id;
-  document.getElementById("editProjetoNome").value = proj.nome || "";
-  document.getElementById("editProjetoDescricao").value = proj.descricao || "";
-  document.getElementById("modalProjetoTitle").textContent = `Editar Projeto: ${proj.nome}`;
+  try {
+    const res = await fetch("/api/projetos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nome, descricao })
+    });
+    const json = await res.json();
+    if (json.success) {
+      fecharModalNovoProjeto();
+      await carregarDados();
+      exibirToast(`✓ Projeto "${nome}" cadastrado com sucesso!`);
+    } else {
+      alert("Erro ao cadastrar projeto: " + json.error);
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Erro na requisição ao salvar novo projeto.");
+  }
+}
+
+function abrirModalEditarProjeto(projId) {
+  let proj = null;
+  if (projId) {
+    proj = todosProjetos.find(p => p.id === projId);
+  } else if (todosProjetos.length > 0) {
+    proj = todosProjetos[0];
+  }
+
+  if (!proj && todosProjetos.length === 0) {
+    alert("Nenhum projeto cadastrado ainda. Use 'Novo Projeto' para começar.");
+    return;
+  }
+
+  if (proj) {
+    preencherCamposEdicaoProjeto(proj);
+  }
+
+  const modal = document.getElementById("modalEditarProjeto");
+  if (modal) modal.style.display = "flex";
+}
+
+function selecionarProjetoParaEditar(projId) {
+  if (!projId) return;
+  const proj = todosProjetos.find(p => p.id === parseInt(projId, 10));
+  if (proj) {
+    preencherCamposEdicaoProjeto(proj);
+  }
+}
+
+function preencherCamposEdicaoProjeto(proj) {
+  const idEl = document.getElementById("editProjId");
+  const nomeEl = document.getElementById("editProjNome");
+  const descEl = document.getElementById("editProjDescricao");
+  const titleEl = document.getElementById("modalProjetoTitle");
+  const infoEl = document.getElementById("editProjProcessosInfo");
+  const selEl = document.getElementById("editProjSelect");
+
+  if (idEl) idEl.value = proj.id;
+  if (nomeEl) nomeEl.value = proj.nome || "";
+  if (descEl) descEl.value = proj.descricao || "";
+  if (titleEl) titleEl.textContent = `Editar Projeto: ${proj.nome}`;
+  if (selEl) selEl.value = proj.id;
 
   const numProcs = (proj.processos || []).length;
-  document.getElementById("editProjetoProcessosInfo").textContent =
-    `ℹ️ Este projeto possui ${numProcs} processo(s) vinculado(s).`;
-
-  document.getElementById("modalEditarProjeto").style.display = "flex";
+  if (infoEl) {
+    infoEl.textContent = `ℹ️ Este projeto possui ${numProcs} processo(s) vinculado(s).`;
+  }
 }
 
-function fecharModalProjeto() {
-  document.getElementById("modalEditarProjeto").style.display = "none";
+function fecharModalEditarProjeto() {
+  const modal = document.getElementById("modalEditarProjeto");
+  if (modal) modal.style.display = "none";
 }
 
-async function salvarProjeto(e) {
+async function salvarProjetoEdicao(e) {
   e.preventDefault();
-  const projId = document.getElementById("editProjetoId").value;
-  const nome = document.getElementById("editProjetoNome").value.trim();
-  const descricao = document.getElementById("editProjetoDescricao").value.trim();
+  const projId = document.getElementById("editProjId").value;
+  const nome = document.getElementById("editProjNome").value.trim();
+  const descricao = document.getElementById("editProjDescricao").value.trim();
 
+  if (!projId) {
+    alert("Selecione um projeto para atualizar.");
+    return;
+  }
   if (!nome) {
     alert("O nome do projeto é obrigatório.");
     return;
@@ -810,8 +916,9 @@ async function salvarProjeto(e) {
     });
     const json = await res.json();
     if (json.success) {
-      fecharModalProjeto();
-      carregarProjetos();
+      fecharModalEditarProjeto();
+      await carregarDados();
+      exibirToast(`✓ Projeto "${nome}" atualizado com sucesso!`);
     } else {
       alert("Erro ao salvar projeto: " + json.error);
     }
@@ -822,8 +929,13 @@ async function salvarProjeto(e) {
 }
 
 async function excluirProjetoAtual() {
-  const projId = document.getElementById("editProjetoId").value;
-  const nome = document.getElementById("editProjetoNome").value;
+  const projId = document.getElementById("editProjId").value;
+  const nome = document.getElementById("editProjNome").value;
+
+  if (!projId) {
+    alert("Nenhum projeto selecionado para exclusão.");
+    return;
+  }
 
   if (!confirm(`Tem certeza que deseja excluir o projeto "${nome}"?\n\nATENÇÃO: Todos os processos vinculados a ele também serão excluídos!`)) {
     return;
@@ -835,8 +947,9 @@ async function excluirProjetoAtual() {
     });
     const json = await res.json();
     if (json.success) {
-      fecharModalProjeto();
-      carregarProjetos();
+      fecharModalEditarProjeto();
+      await carregarDados();
+      exibirToast(`✓ Projeto "${nome}" e seus processos foram excluídos.`);
     } else {
       alert("Erro ao excluir projeto: " + json.error);
     }

@@ -14,7 +14,7 @@ import base64
 from config import PORT, HOST, BASE_DIR, ADMIN_USER, ADMIN_PASS
 from database import (
     listar_processos, listar_projetos_com_processos, obter_processo, criar_processo, atualizar_processo,
-    excluir_processo, obter_projeto, atualizar_projeto, excluir_projeto, listar_ultimos_relatorios,
+    excluir_processo, obter_projeto, obter_ou_criar_projeto, atualizar_projeto, excluir_projeto, listar_ultimos_relatorios,
     formatar_data_br, formatar_data_hora_br
 )
 from scheduler import scheduler
@@ -281,6 +281,21 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
         # Demais rotas POST exigem autenticação
         if not self._is_authenticated():
             self._send_json({"success": False, "error": "Acesso não autorizado. Faça login primeiro."}, 401)
+            return
+
+        # Criar Projeto Diretamente
+        if path == "/api/projetos":
+            dados = self._read_json()
+            nome = str(dados.get("nome", "")).strip()
+            desc = str(dados.get("descricao", "")).strip()
+            if not nome:
+                self._send_json({"success": False, "error": "O nome do projeto é obrigatório."}, 400)
+                return
+            try:
+                proj_id = obter_ou_criar_projeto(nome, desc)
+                self._send_json({"success": True, "id": proj_id, "message": "Projeto cadastrado com sucesso!"}, 201)
+            except Exception as e:
+                self._send_json({"success": False, "error": f"Erro ao cadastrar projeto: {str(e)}"}, 400)
             return
 
         # Criar Processo
