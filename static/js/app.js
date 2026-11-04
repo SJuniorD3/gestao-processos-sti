@@ -656,13 +656,6 @@ async function salvarProcesso(e) {
     alert("Falha na requisição ao servidor.");
   }
 }
-      alert("Erro ao salvar: " + json.error);
-    }
-  } catch (err) {
-    console.error(err);
-    alert("Falha na requisição ao servidor.");
-  }
-}
 
 async function confirmarExclusao(id, numero) {
   if (confirm(`Tem certeza que deseja excluir o processo "${numero}" e todo o seu histórico?`)) {
