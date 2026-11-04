@@ -682,9 +682,12 @@ def listar_projetos_com_processos(apenas_monitorados=False):
                 proc["ultimos_4_status"] = status_list
 
                 # Contagem de documentos/peças anexadas
-                cursor.execute("SELECT COUNT(*) AS total FROM documentos_processo WHERE processo_id = ?", (proc["id"],))
-                doc_row = cursor.fetchone()
-                proc["total_documentos"] = doc_row["total"] if doc_row else 0
+                try:
+                    cursor.execute("SELECT COUNT(*) AS total FROM documentos_processo WHERE processo_id = ?", (proc["id"],))
+                    doc_row = cursor.fetchone()
+                    proc["total_documentos"] = doc_row["total"] if (doc_row and "total" in doc_row) else 0
+                except Exception:
+                    proc["total_documentos"] = 0
 
                 processos_list.append(proc)
 
@@ -752,9 +755,12 @@ def listar_processos(apenas_monitorados=False):
             proc["ultimos_4_status"] = status_list
 
             # Contagem de documentos/peças anexadas
-            cursor.execute("SELECT COUNT(*) AS total FROM documentos_processo WHERE processo_id = ?", (proc["id"],))
-            doc_row = cursor.fetchone()
-            proc["total_documentos"] = doc_row["total"] if doc_row else 0
+            try:
+                cursor.execute("SELECT COUNT(*) AS total FROM documentos_processo WHERE processo_id = ?", (proc["id"],))
+                doc_row = cursor.fetchone()
+                proc["total_documentos"] = doc_row["total"] if (doc_row and "total" in doc_row) else 0
+            except Exception:
+                proc["total_documentos"] = 0
 
             resultado.append(proc)
 

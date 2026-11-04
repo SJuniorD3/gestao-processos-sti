@@ -200,14 +200,20 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         # Rota da API: Lista de Processos
         if path == "/api/processos":
-            processos = listar_processos()
-            self._send_json({"success": True, "data": processos})
+            try:
+                processos = listar_processos()
+                self._send_json({"success": True, "data": processos})
+            except Exception as e:
+                self._send_json({"success": False, "error": f"Erro ao listar processos: {str(e)}"}, 500)
             return
 
         # Rota da API: Projetos Agrupados com seus Processos
         if path == "/api/projetos":
-            projetos = listar_projetos_com_processos()
-            self._send_json({"success": True, "data": projetos})
+            try:
+                projetos = listar_projetos_com_processos()
+                self._send_json({"success": True, "data": projetos})
+            except Exception as e:
+                self._send_json({"success": False, "error": f"Erro ao listar projetos: {str(e)}"}, 500)
             return
 
         # Rota da API: Detalhes de um Projeto Específico

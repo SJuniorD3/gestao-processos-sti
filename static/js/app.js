@@ -229,15 +229,17 @@ async function carregarDados() {
     const res = await fetch("/api/projetos");
     const json = await res.json();
     if (json.success) {
-      todosProjetos = json.data;
+      todosProjetos = Array.isArray(json.data) ? json.data : [];
       todosProcessos = [];
       const locaisSet = new Set();
 
       todosProjetos.forEach(pr => {
         (pr.processos || []).forEach(p => {
-          todosProcessos.push(p);
-          if (p.local_atual && p.local_atual.trim()) {
-            locaisSet.add(p.local_atual.trim());
+          if (p) {
+            todosProcessos.push(p);
+            if (p.local_atual && String(p.local_atual).trim()) {
+              locaisSet.add(String(p.local_atual).trim());
+            }
           }
         });
       });
@@ -248,11 +250,15 @@ async function carregarDados() {
       renderizarTabela(todosProjetos);
       renderizarTimelineVisual(todosProjetos);
       atualizarKPIs(todosProjetos, todosProcessos);
+    } else {
+      document.getElementById("tabelaCorpo").innerHTML = `
+        <tr><td colspan="11" class="loading-cell text-danger" style="text-align: center; padding: 24px;">⚠️ ${escapeHtml(json.error || "Erro ao consultar lista de projetos no servidor.")}</td></tr>
+      `;
     }
   } catch (err) {
     console.error("Erro ao carregar dados:", err);
     document.getElementById("tabelaCorpo").innerHTML = `
-      <tr><td colspan="12" class="loading-cell text-danger">Erro de conexão ao carregar os projetos.</td></tr>
+      <tr><td colspan="11" class="loading-cell text-danger" style="text-align: center; padding: 24px;">⚠️ Erro de conexão ao carregar os projetos. Tente novamente em instantes.</td></tr>
     `;
   }
 }
@@ -335,9 +341,14 @@ function renderizarTabela(listaProjetos) {
             📁 ${escapeHtml(proj.nome)}
             <span style="display: block; font-size: 11px; color: #64748b;">(Sem processos)</span>
           </td>
-          <td colspan="10" style="color: #94a3b8; font-style: italic;">
-            Nenhum processo vinculado a este projeto.
-            <button class="btn btn-sm btn-primary" onclick="abrirModalNovoProcessoComProjeto('${escapeHtml(proj.nome)}')">➕ Adicionar Processo</button>
+          <td colspan="10" style="color: #64748b; font-size: 12.5px; padding: 12px 14px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+              <span><em>Nenhum processo vinculado a este projeto ainda.</em></span>
+              <div style="display: flex; gap: 6px;">
+                <button type="button" class="btn btn-sm btn-outline" onclick="abrirModalEditarProjeto(${proj.id})">✏️ Editar Projeto</button>
+                <button type="button" class="btn btn-sm btn-primary" onclick="abrirModalNovoProcessoComProjeto(${proj.id})">➕ Adicionar Processo</button>
+              </div>
+            </div>
           </td>
         </tr>
       `;
@@ -431,17 +442,18 @@ function renderizarTabela(listaProjetos) {
 }
 
 function atualizarKPIs(listaProjetos, listaProcessos) {
-  const totalProj = listaProjetos.length;
-  const total = listaProcessos.length;
-  const sti = listaProcessos.filter(p => p.local_atual.toUpperCase().includes("STI")).length;
-  const fora = total - sti;
-  const alertas = listaProcessos.filter(p => (p.dias_no_setor || 0) > 60).length;
+  const totalProj = Array.isArray(listaProjetos) ? listaProjetos.length : 0;
+  const procs = Array.isArray(listaProcessos) ? listaProcessos : [];
+  const total = procs.length;
+  const sti = procs.filter(p => p && p.local_atual && String(p.local_atual).toUpperCase().includes("STI")).length;
+  const fora = Math.max(0, total - sti);
+  const alertas = procs.filter(p => (Number(p.dias_no_setor) || 0) > 60).length;
 
   if (document.getElementById("kpiProjetos")) document.getElementById("kpiProjetos").textContent = totalProj;
-  document.getElementById("kpiTotal").textContent = total;
-  document.getElementById("kpiSTI").textContent = sti;
-  document.getElementById("kpiFora").textContent = fora;
-  document.getElementById("kpiAlerta").textContent = alertas;
+  if (document.getElementById("kpiTotal")) document.getElementById("kpiTotal").textContent = total;
+  if (document.getElementById("kpiSTI")) document.getElementById("kpiSTI").textContent = sti;
+  if (document.getElementById("kpiFora")) document.getElementById("kpiFora").textContent = fora;
+  if (document.getElementById("kpiAlerta")) document.getElementById("kpiAlerta").textContent = alertas;
 }
 
 function filtrarTabela() {
@@ -463,7 +475,7 @@ function filtrarTabela() {
         (p.situacao && p.situacao.toLowerCase().includes(texto));
 
       const matchLocal = !local || p.local_atual === local;
-      const matchSistema = !sistema || p.sistema.toUpperCase() === sistema.toUpperCase();
+      const matchSistema = !sistema || (String(p.sistema || "").toUpperCase() === sistema.toUpperCase());
 
       // Filtro por Faixa de Dias (SLA)
       let matchDias = true;
@@ -711,15 +723,22 @@ function exibirToast(msg) {
   }, 2500);
 }
 
-function abrirModalNovoProcessoComProjeto(nomeProj) {
+function abrirModalNovoProcessoComProjeto(identificador) {
   abrirModalNovoProcesso();
-  document.getElementById("formProjeto").value = nomeProj;
-  // Busca descrição existente
-  for (let pr of todosProjetos) {
-    if (pr.nome.toUpperCase() === nomeProj.toUpperCase()) {
-      document.getElementById("formDescricao").value = pr.descricao || "";
-      break;
-    }
+  let proj = null;
+  if (typeof identificador === "number") {
+    proj = todosProjetos.find(p => p.id === identificador);
+  } else {
+    proj = todosProjetos.find(p => String(p.nome || "").toUpperCase() === String(identificador || "").toUpperCase());
+  }
+  if (proj) {
+    const fProj = document.getElementById("formProjeto");
+    const fDesc = document.getElementById("formDescricao");
+    if (fProj) fProj.value = proj.nome || "";
+    if (fDesc) fDesc.value = proj.descricao || "";
+  } else if (typeof identificador === "string") {
+    const fProj = document.getElementById("formProjeto");
+    if (fProj) fProj.value = identificador;
   }
 }
 
@@ -1178,6 +1197,8 @@ function abrirModalNovoProjeto() {
 }
 
 function fecharModalNovoProjeto() {
+  const form = document.getElementById("formNovoProjeto");
+  if (form) form.reset();
   const modal = document.getElementById("modalNovoProjeto");
   if (modal) modal.style.display = "none";
 }
