@@ -104,7 +104,7 @@ function alternarModoVisualizacao(modo) {
 function renderizarTabela(listaProjetos) {
   const tbody = document.getElementById("tabelaCorpo");
   if (!listaProjetos || listaProjetos.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="12" class="loading-cell">Nenhum projeto cadastrado.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="loading-cell">Nenhum projeto cadastrado.</td></tr>`;
     return;
   }
 
@@ -122,7 +122,7 @@ function renderizarTabela(listaProjetos) {
             📁 ${escapeHtml(proj.nome)}
             <span style="display: block; font-size: 11px; color: #64748b;">(Sem processos)</span>
           </td>
-          <td colspan="11" style="color: #94a3b8; font-style: italic;">
+          <td colspan="10" style="color: #94a3b8; font-style: italic;">
             Nenhum processo vinculado a este projeto.
             <button class="btn btn-sm btn-primary" onclick="abrirModalNovoProcessoComProjeto('${escapeHtml(proj.nome)}')">➕ Adicionar Processo</button>
           </td>
@@ -269,16 +269,29 @@ function limparFiltrosV3() {
   filtrarTabela();
 }
 
+function obterIconeStatus(texto) {
+  if (!texto) return "📄";
+  const t = texto.toLowerCase();
+  if (t.includes("parecer") || t.includes("jurídic") || t.includes("asjur")) return "⚖️";
+  if (t.includes("despacho") || t.includes("assinad") || t.includes("autoriz") || t.includes("gab")) return "✍️";
+  if (t.includes("licita") || t.includes("cota") || t.includes("pregão") || t.includes("edital") || t.includes("cpl")) return "🏷️";
+  if (t.includes("empenh") || t.includes("pagament") || t.includes("financeir") || t.includes("saofc")) return "💰";
+  if (t.includes("conclu") || t.includes("finaliz") || t.includes("homolog")) return "🏁";
+  if (t.includes("recebid") || t.includes("chegad") || t.includes("autuad")) return "📥";
+  return "🔄";
+}
+
 function renderizarTimelineVisual(listaProjetos) {
   const container = document.getElementById("containerTimeline");
   if (!container) return;
 
   if (!listaProjetos || listaProjetos.length === 0) {
     container.innerHTML = `
-      <div style="background: white; padding: 40px; text-align: center; border-radius: 12px; border: 1px dashed #cbd5e1; color: #64748b;">
-        <span style="font-size: 32px; display: block; margin-bottom: 8px;">🔍</span>
-        <strong>Nenhum projeto ou processo encontrado com os filtros selecionados.</strong>
+      <div style="background: white; padding: 40px; text-align: center; border-radius: 14px; border: 1px dashed #cbd5e1; color: #64748b;">
+        <span style="font-size: 36px; display: block; margin-bottom: 8px;">🔍</span>
+        <strong style="color: #0f172a; font-size: 14px;">Nenhum projeto ou processo encontrado com os filtros selecionados.</strong>
         <p style="font-size: 12px; margin-top: 4px;">Tente redefinir os filtros para visualizar os dados.</p>
+        <button class="btn btn-primary" style="margin-top: 14px; font-size: 12px;" onclick="limparFiltrosV3()">Redefinir Filtros</button>
       </div>
     `;
     return;
@@ -290,6 +303,9 @@ function renderizarTimelineVisual(listaProjetos) {
     const procs = proj.processos || [];
     if (procs.length === 0) return;
 
+    // Verifica se algum processo tem alerta crítico
+    const temCritico = procs.some(p => (p.dias_no_setor || 0) > 60);
+
     htmlTotal += `
       <div class="project-card">
         <div class="project-card-header">
@@ -299,14 +315,15 @@ function renderizarTimelineVisual(listaProjetos) {
               <span style="background: rgba(255,255,255,0.15); font-size: 11px; padding: 2px 8px; border-radius: 9999px; font-weight: 500;">
                 ${procs.length} processo(s)
               </span>
+              ${temCritico ? '<span style="background: rgba(239,68,68,0.25); color: #fca5a5; font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: 600; border: 1px solid rgba(239,68,68,0.4);">⚠️ Alerta Crítico</span>' : ''}
             </div>
             <div class="project-desc">${escapeHtml(proj.descricao || "Sem descrição cadastrada")}</div>
           </div>
-          <div>
-            <button class="btn btn-sm btn-outline" onclick="abrirModalNovoProcessoComProjeto('${escapeHtml(proj.nome)}')">
+          <div style="display: flex; gap: 6px;">
+            <button class="btn btn-sm btn-outline" style="border-color: rgba(255,255,255,0.3); color: white;" onclick="abrirModalNovoProcessoComProjeto('${escapeHtml(proj.nome)}')">
               ➕ Add Processo
             </button>
-            <button class="btn btn-sm btn-outline" onclick="abrirModalEditarProjeto(${proj.id})">
+            <button class="btn btn-sm btn-outline" style="border-color: rgba(255,255,255,0.3); color: white;" onclick="abrirModalEditarProjeto(${proj.id})">
               ✏️ Editar
             </button>
           </div>
@@ -343,7 +360,7 @@ function renderizarTimelineVisual(listaProjetos) {
           const bulletCls = isAtual ? "timeline-bullet current" : "timeline-bullet";
           const contentCls = isAtual ? "timeline-content current" : "timeline-content";
           const dataFormatada = st.data_movimentacao || formatarData(st.data_registro) || "-";
-          const icone = isAtual ? "📍" : (sIdx === 1 ? "⚡" : "📄");
+          const icone = isAtual ? "📍" : obterIconeStatus((st.situacao || "") + " " + (st.acao || "") + " " + (st.local || ""));
 
           timelineItemsHtml += `
             <div class="timeline-item">
@@ -354,13 +371,13 @@ function renderizarTimelineVisual(listaProjetos) {
                     <strong style="color: ${isAtual ? '#1e3a8a' : '#1e293b'}; font-weight: 700;">
                       ${escapeHtml(st.local || p.local_atual || "-")}
                     </strong>
-                    ${isAtual ? '<span style="background: #2563eb; color: white; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; margin-left: 6px; text-transform: uppercase;">Posição Atual</span>' : ''}
+                    ${isAtual ? '<span style="background: #2563eb; color: white; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 4px; margin-left: 6px; text-transform: uppercase;">Posição Atual</span>' : ''}
                   </div>
                   <span style="font-family: monospace; color: #64748b; font-size: 11px;">
                     ${escapeHtml(dataFormatada)}
                   </span>
                 </div>
-                <div style="color: #334155; line-height: 1.4;">
+                <div style="color: #334155; line-height: 1.45;">
                   ${escapeHtml(st.situacao || p.situacao || "-")}
                   ${st.acao ? ` <span style="color: #64748b;">(Ação: ${escapeHtml(st.acao)})</span>` : ''}
                 </div>
@@ -376,7 +393,7 @@ function renderizarTimelineVisual(listaProjetos) {
               <div class="timeline-content-header">
                 <div>
                   <strong style="color: #1e3a8a; font-weight: 700;">${escapeHtml(p.local_atual || "-")}</strong>
-                  <span style="background: #2563eb; color: white; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; margin-left: 6px; text-transform: uppercase;">Posição Atual</span>
+                  <span style="background: #2563eb; color: white; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 4px; margin-left: 6px; text-transform: uppercase;">Posição Atual</span>
                 </div>
                 <span style="font-family: monospace; color: #64748b; font-size: 11px;">${formatarData(p.data_recebimento)}</span>
               </div>
@@ -396,7 +413,7 @@ function renderizarTimelineVisual(listaProjetos) {
                  title="Clique para abrir diretamente no portal oficial">
                 🔗 ${escapeHtml(p.numero_processo)}
               </a>
-              <button class="btn btn-sm btn-secondary" style="padding: 2px 6px; font-size: 11px;" title="Copiar número" onclick="copiarNumeroProcesso('${escapeHtml(p.numero_processo)}')">
+              <button class="btn btn-sm btn-secondary" style="padding: 2px 7px; font-size: 11px;" title="Copiar número" onclick="copiarNumeroProcesso('${escapeHtml(p.numero_processo)}')">
                 📋 Copiar
               </button>
               <span style="color: #cbd5e1;">•</span>
@@ -415,7 +432,7 @@ function renderizarTimelineVisual(listaProjetos) {
 
           <!-- LINHA DO TEMPO VISUAL -->
           <div class="timeline-track">
-            <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 2px; display: flex; align-items: center; gap: 4px;">
+            <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 2px; display: flex; align-items: center; gap: 5px;">
               <span>⏱️ Trilha de Tramitação do Processo</span>
             </div>
             ${timelineItemsHtml}
@@ -435,14 +452,27 @@ function renderizarTimelineVisual(listaProjetos) {
 
 function copiarNumeroProcesso(num) {
   if (navigator.clipboard) {
-    navigator.clipboard.writeText(num).then(() => {
-      alert(`Número ${num} copiado para a área de transferência!`);
-    }).catch(() => {
-      alert(`Processo: ${num}`);
-    });
-  } else {
-    alert(`Processo: ${num}`);
+    navigator.clipboard.writeText(num).catch(() => {});
   }
+  exibirToast(`✓ Processo ${num} copiado para a área de transferência!`);
+}
+
+function exibirToast(msg) {
+  let toast = document.getElementById("toastNotification");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "toastNotification";
+    toast.style.cssText = "position: fixed; bottom: 24px; right: 24px; background: #0f172a; color: white; padding: 12px 20px; border-radius: 12px; font-size: 13px; font-weight: 600; box-shadow: 0 10px 20px -3px rgba(0,0,0,0.3); z-index: 9999; display: flex; align-items: center; gap: 8px; transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1); transform: translateY(50px); opacity: 0; pointer-events: none;";
+    document.body.appendChild(toast);
+  }
+  toast.innerText = msg;
+  toast.style.transform = "translateY(0)";
+  toast.style.opacity = "1";
+  clearTimeout(toast._timeout);
+  toast._timeout = setTimeout(() => {
+    toast.style.transform = "translateY(50px)";
+    toast.style.opacity = "0";
+  }, 2500);
 }
 
 function abrirModalNovoProcessoComProjeto(nomeProj) {

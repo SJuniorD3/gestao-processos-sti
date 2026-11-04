@@ -3,25 +3,25 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gestão e Rastreamento de Processos - STI</title>
+  <title>Gestão e Rastreamento de Processos - STI (v3.0 Homologação)</title>
   <link rel="stylesheet" href="/css/style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
-  <!-- TOPO INSTITUCIONAL -->
+  <!-- CABEÇALHO REDESENHADO (HIERARQUIA VISUAL E SUTILEZA) -->
   <header class="top-bar">
     <div class="header-container">
       <div class="brand">
         <div class="brand-badge">STI</div>
         <div class="brand-text">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <h1>Superintendência de Tecnologia da Informação</h1>
+            <h1>Gestão e Rastreamento de Processos</h1>
             <span class="badge-env-homolog">🛠️ v3.0 • Homologação</span>
           </div>
-          <p>Painel de Rastreamento de Processos • Ambiente de Desenvolvimento e Testes</p>
+          <p>Superintendência de TI • SEDUC Maranhão</p>
         </div>
       </div>
 
@@ -33,23 +33,24 @@
         </div>
       </div>
 
+      <!-- Ações com Hierarquia Clara -->
       <div class="header-actions">
-        <button class="btn btn-outline" onclick="abrirModalSistemas()">
-          <span class="icon">🔑</span> Sistemas (SEI / STARTGOV)
-        </button>
-        <button class="btn btn-outline" onclick="abrirModalEditarProjeto()">
-          <span class="icon">✏️</span> Editar Projeto
-        </button>
-        <button class="btn btn-success" style="background: #059669; color: white;" onclick="sincronizarSistemasWeb()">
-          <span class="icon">🔄</span> Sincronizar Sistemas
-        </button>
         <button class="btn btn-primary" onclick="abrirModalNovoProcesso()">
           <span class="icon">➕</span> Novo Processo
         </button>
-        <button class="btn btn-warning" onclick="dispararResumoAgora()">
-          <span class="icon">⚡</span> Disparar Resumo Agora
+        <button class="btn btn-secondary" onclick="sincronizarSistemasWeb()" title="Consultar portais oficiais">
+          <span class="icon">🔄</span> Sincronizar
         </button>
-        <button class="btn btn-outline" style="border-color: #ef4444; color: #ef4444;" onclick="fazerLogout()" title="Encerrar sessão de forma segura">
+        <button class="btn btn-outline" onclick="abrirModalEditarProjeto()">
+          <span class="icon">✏️</span> Projetos
+        </button>
+        <button class="btn btn-outline" onclick="abrirModalSistemas()">
+          <span class="icon">🔑</span> Portais
+        </button>
+        <button class="btn btn-outline" onclick="dispararResumoAgora()" title="Disparar relatório agora">
+          <span class="icon">⚡</span> Disparar
+        </button>
+        <button class="btn btn-outline" style="border-color: #fecaca; color: #ef4444;" onclick="fazerLogout()" title="Encerrar sessão com segurança">
           <span class="icon">🚪</span> Sair
         </button>
       </div>
@@ -59,96 +60,128 @@
   <!-- CONTEÚDO PRINCIPAL -->
   <main class="main-container">
 
-    <!-- CARDS DE MÉTRICAS / KPIS -->
+    <!-- CARDS DE MÉTRICAS / KPIS COM MICRO-ANÁLISE -->
     <section class="kpi-grid">
       <div class="kpi-card">
         <div class="kpi-icon icon-blue">📂</div>
-        <div class="kpi-info">
-          <span class="kpi-title">Total de Projetos</span>
-          <span class="kpi-value" id="kpiProjetos">0</span>
+        <div style="flex: 1;">
+          <span class="kpi-title">Projetos Ativos</span>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kpiProjetos">0</span>
+            <span class="kpi-tag kpi-tag-blue">100% TI</span>
+          </div>
         </div>
       </div>
+
       <div class="kpi-card">
         <div class="kpi-icon icon-blue">📋</div>
-        <div class="kpi-info">
+        <div style="flex: 1;">
           <span class="kpi-title">Processos Monitorados</span>
-          <span class="kpi-value" id="kpiTotal">0</span>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kpiTotal">0</span>
+            <span class="kpi-tag kpi-tag-gray">SEI & StartGov</span>
+          </div>
         </div>
       </div>
+
       <div class="kpi-card">
         <div class="kpi-icon icon-indigo">🏢</div>
-        <div class="kpi-info">
+        <div style="flex: 1;">
           <span class="kpi-title">No Setor STI</span>
-          <span class="kpi-value" id="kpiSTI">0</span>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kpiSTI" style="color: #4f46e5;">0</span>
+            <span class="kpi-tag kpi-tag-indigo">Ação Local</span>
+          </div>
         </div>
       </div>
+
       <div class="kpi-card">
         <div class="kpi-icon icon-gray">🔄</div>
-        <div class="kpi-info">
+        <div style="flex: 1;">
           <span class="kpi-title">Em Outros Setores</span>
-          <span class="kpi-value" id="kpiFora">0</span>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kpiFora">0</span>
+            <span class="kpi-tag kpi-tag-gray">Tramitando</span>
+          </div>
         </div>
       </div>
-      <div class="kpi-card">
+
+      <div class="kpi-card kpi-card-alert">
         <div class="kpi-icon icon-red">⚠️</div>
-        <div class="kpi-info">
-          <span class="kpi-title">Alerta (> 60 dias)</span>
-          <span class="kpi-value" id="kpiAlerta">0</span>
+        <div style="flex: 1;">
+          <span class="kpi-title" style="color: #b91c1c;">Alerta Crítico (> 60 dias)</span>
+          <div class="kpi-value-row">
+            <span class="kpi-value" id="kpiAlerta" style="color: #dc2626;">0</span>
+            <span class="kpi-tag kpi-tag-red">Requer Cobrança</span>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- BARRA DE FERRAMENTAS E FILTROS COMBINADOS V3.0 -->
-    <section class="toolbar">
-      <div class="search-box">
-        <span class="search-icon">🔍</span>
-        <input type="text" id="filtroTexto" placeholder="Filtrar por número, projeto, descrição ou ação..." oninput="filtrarTabela()">
+    <!-- BARRA DE FILTROS FACETADOS E CONTROLE DE VISUALIZAÇÃO (UX PRO V3.0) -->
+    <section class="toolbar-v3">
+      <div class="toolbar-top-row">
+        <!-- Campo de Busca Inteligente -->
+        <div class="search-box-v3">
+          <span style="color: #94a3b8; margin-right: 8px;">🔍</span>
+          <input type="text" id="filtroTexto" placeholder="Buscar por número, projeto, descrição ou setor..." oninput="filtrarTabela()">
+          <span class="search-badge-kbd">Ctrl+K</span>
+        </div>
+
+        <!-- Seletor de Modo de Exibição (Princípio da Divulgação Progressiva) -->
+        <div class="view-switcher">
+          <button id="btnModoTabela" class="view-btn active" onclick="alternarModoVisualizacao('tabela')">
+            📄 Visão Sintética
+          </button>
+          <button id="btnModoTimeline" class="view-btn" onclick="alternarModoVisualizacao('timeline')">
+            ⏱️ Visão Linha do Tempo
+          </button>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-secondary" onclick="exportarCSV()">
+            <span class="icon">📥</span> Exportar Excel
+          </button>
+          <button class="btn btn-secondary" onclick="verPreviewRelatorio()">
+            <span class="icon">👁️</span> Prévia do Resumo
+          </button>
+        </div>
       </div>
-      <div class="filter-group">
-        <select id="filtroLocal" onchange="filtrarTabela()">
-          <option value="">Todos os Locais</option>
-        </select>
-        <select id="filtroSistema" onchange="filtrarTabela()">
+
+      <!-- Filtros Rápidos Facetados -->
+      <div class="toolbar-bottom-row">
+        <span style="color: #64748b; font-weight: 600;">Filtrar por:</span>
+
+        <select id="filtroSistema" class="filter-select" onchange="filtrarTabela()">
           <option value="">Todos os Sistemas</option>
-          <option value="SEI">SEI</option>
-          <option value="STARTGOV">STARTGOV</option>
+          <option value="SEI">Apenas SEI</option>
+          <option value="STARTGOV">Apenas STARTGOV</option>
         </select>
-        <select id="filtroDias" onchange="filtrarTabela()">
-          <option value="">Tempo: Todos</option>
-          <option value="ate_30">Normal (≤ 30 dias)</option>
+
+        <select id="filtroLocal" class="filter-select" onchange="filtrarTabela()">
+          <option value="">Todos os Setores</option>
+        </select>
+
+        <select id="filtroDias" class="filter-select" onchange="filtrarTabela()">
+          <option value="">Tempo no Setor: Todos</option>
+          <option value="ate_30">No Prazo (≤ 30 dias)</option>
           <option value="31_60">Atenção (31 a 60 dias)</option>
           <option value="mais_60">⚠️ Crítico (> 60 dias)</option>
         </select>
-        <select id="filtroMonitorar" onchange="filtrarTabela()">
+
+        <select id="filtroMonitorar" class="filter-select" onchange="filtrarTabela()">
           <option value="1" selected>Somente Monitorados</option>
           <option value="">Todos os Processos</option>
           <option value="0">Não Monitorados</option>
         </select>
 
-        <button class="btn btn-secondary" style="font-size: 11px; padding: 6px 10px;" onclick="limparFiltrosV3()" title="Redefinir todos os filtros">
-          Limpar
-        </button>
-
-        <!-- SELETOR DE MODO DE EXIBIÇÃO (UX V3.0) -->
-        <div class="view-switcher">
-          <button id="btnModoTabela" class="view-btn active" onclick="alternarModoVisualizacao('tabela')">
-            📄 Tabela
-          </button>
-          <button id="btnModoTimeline" class="view-btn" onclick="alternarModoVisualizacao('timeline')">
-            ⏱️ Linha do Tempo
-          </button>
-        </div>
-
-        <button class="btn btn-secondary" onclick="exportarCSV()">
-          <span class="icon">📥</span> Exportar Excel
-        </button>
-        <button class="btn btn-secondary" onclick="verPreviewRelatorio()">
-          <span class="icon">👁️</span> Prévia do Resumo
+        <button class="btn btn-outline" style="font-size: 11px; padding: 5px 10px;" onclick="limparFiltrosV3()">
+          Limpar filtros
         </button>
       </div>
     </section>
 
-    <!-- VISÃO 1: TABELA SINTÉTICA (MODO CLÁSSICO) -->
+    <!-- VISÃO 1: TABELA SINTÉTICA (MODO CLÁSSICO REDESENHADO) -->
     <section class="table-container" id="containerTabela">
       <table class="sti-table" id="tabelaProcessos">
         <thead>
@@ -157,25 +190,24 @@
             <th>SISTEMA</th>
             <th>Nº - PROCESSO</th>
             <th>DESCRIÇÃO</th>
-            <th>LOCAL</th>
-            <th>AÇÃO</th>
+            <th>LOCAL ATUAL</th>
+            <th>AÇÃO / PROVIDÊNCIA</th>
             <th>DATA RECEBIMENTO</th>
             <th>SITUAÇÃO</th>
             <th class="text-center">DIAS</th>
-            <th class="text-center">MONITORAR</th>
-            <th class="text-center">ÚLTIMOS 4 STATUS</th>
-            <th class="text-center">OPÇÕES</th>
+            <th class="text-center">STATUS</th>
+            <th class="text-center">AÇÕES</th>
           </tr>
         </thead>
         <tbody id="tabelaCorpo">
           <tr>
-            <td colspan="12" class="loading-cell">Carregando processos da STI...</td>
+            <td colspan="11" class="loading-cell">Carregando processos da STI...</td>
           </tr>
         </tbody>
       </table>
     </section>
 
-    <!-- VISÃO 2: LINHA DO TEMPO VISUAL (MODO V3.0) -->
+    <!-- VISÃO 2: LINHA DO TEMPO VISUAL (MODO V3.0 EM CARDS HIERÁRQUICOS) -->
     <section class="timeline-view-container" id="containerTimeline" style="display: none;">
       <!-- Cards com timelines gerados dinamicamente via app.js -->
     </section>
@@ -184,7 +216,7 @@
     <section class="logs-section">
       <div class="logs-header">
         <h3>Histórico de Disparos de Resumos Diários</h3>
-        <button class="btn-link" onclick="carregarHistoricoDisparos()">Atualizar Logs</button>
+        <button class="btn btn-outline" style="font-size: 11px; padding: 4px 8px;" onclick="carregarHistoricoDisparos()">Atualizar Logs</button>
       </div>
       <div id="listaLogsDisparos" class="logs-list">
         <p class="empty-text">Nenhum disparo registrado nesta sessão.</p>
@@ -204,122 +236,62 @@
         <input type="hidden" id="formProcId">
         <div class="form-row">
           <div class="form-group col-6">
-            <label>Projeto *</label>
-            <input type="text" id="formProjeto" placeholder="Digite o nome do projeto" required>
+            <label for="formProjeto">Nome do Projeto *</label>
+            <input type="text" id="formProjeto" required placeholder="Ex: DUARTE JR, PROTOCOLO">
           </div>
           <div class="form-group col-6">
-            <label>Sistema *</label>
+            <label for="formSistema">Sistema Oficial *</label>
             <select id="formSistema" required>
-              <option value="SEI">SEI</option>
-              <option value="STARTGOV">STARTGOV</option>
-              <option value="OUTRO">OUTRO</option>
+              <option value="SEI">SEI (Sistema Eletrônico de Informações)</option>
+              <option value="STARTGOV">STARTGOV (Compras e Licitações)</option>
             </select>
           </div>
         </div>
 
-        <div class="form-row">
-          <div class="form-group col-12">
-            <label>Nº - Processo * (Obrigatório para identificação)</label>
-            <input type="text" id="formNumero" placeholder="Ex: 202.522.010.200.056 ou SEDUC/00469/2026" required>
-          </div>
+        <div class="form-group">
+          <label for="formDescricao">Descrição / Objeto do Projeto</label>
+          <textarea id="formDescricao" rows="2" placeholder="Descreva o objetivo geral do projeto..."></textarea>
         </div>
 
         <div class="form-row">
-          <div class="form-group col-12">
-            <label>Descrição / Objeto (Opcional)</label>
-            <textarea id="formDescricao" rows="2" placeholder="( 2,5 milhões) servidor, computador, scanner..."></textarea>
+          <div class="form-group col-6">
+            <label for="formNumero">Nº do Processo *</label>
+            <input type="text" id="formNumero" required placeholder="Ex: 202.522.010.200.056 ou SEDUC/00469/2026">
+          </div>
+          <div class="form-group col-6">
+            <label for="formLocal">Local / Setor Atual</label>
+            <input type="text" id="formLocal" placeholder="Ex: STI/SEDUC, SAOFC/SEDUC">
           </div>
         </div>
 
-        <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px; margin-bottom: 14px;">
-          <p style="font-size: 12px; font-weight: 700; color: #1e3a8a; margin-bottom: 4px;">
-            ℹ️ Dados de Trâmite (Não obrigatórios no cadastro)
-          </p>
-          <p style="font-size: 11px; color: #64748b; margin-bottom: 10px;">
-            Estes campos podem ficar em branco no cadastro inicial e serão preenchidos automaticamente pelo monitoramento.
-          </p>
-
-          <div class="form-row">
-            <div class="form-group col-6">
-              <label>Local Atual (Opcional)</label>
-              <input type="text" id="formLocal" placeholder="Ex: STI/SEDUC, SAOFC/SEDUC, SUMES">
-            </div>
-            <div class="form-group col-6">
-              <label>Data de Recebimento (Opcional)</label>
-              <input type="date" id="formDataRecebimento">
-            </div>
+        <div class="form-row">
+          <div class="form-group col-6">
+            <label for="formDataRec">Data de Recebimento</label>
+            <input type="date" id="formDataRec">
           </div>
-
-          <div class="form-row">
-            <div class="form-group col-12">
-              <label>Ação (Opcional)</label>
-              <input type="text" id="formAcao" placeholder="Ex: DFD +ETP +TR ou Fazer despacho dando ciência">
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group col-12">
-              <label>Situação (Opcional)</label>
-              <input type="text" id="formSituacao" placeholder="Ex: docs para assinar ou Processo recebido na unidade">
-            </div>
+          <div class="form-group col-6">
+            <label for="formSituacao">Situação</label>
+            <input type="text" id="formSituacao" placeholder="Ex: Em Análise, Concluído">
           </div>
         </div>
 
-        <div class="form-row" style="margin-top: 6px;">
-          <div class="form-group col-12">
-            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: #1e40af; font-weight: 700;">
-              <input type="checkbox" id="formMonitorar" checked style="width: 18px; height: 18px;">
-              <span>Monitorar este processo no resumo diário (08:00, 12:00 e 16:00)</span>
-            </label>
-          </div>
+        <div class="form-group">
+          <label for="formAcao">Ação / Providência Imediata</label>
+          <input type="text" id="formAcao" placeholder="Ex: Aguardando emissão de empenho">
+        </div>
+
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="formMonitorar" checked>
+            Monitorar automaticamente via Robô (SEI / STARTGOV)
+          </label>
         </div>
 
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" onclick="fecharModalProcesso()">Cancelar</button>
-          <button type="submit" class="btn btn-primary" id="btnSalvarProc">Salvar Processo</button>
+          <button type="submit" class="btn btn-primary">Salvar Processo</button>
         </div>
       </form>
-    </div>
-  </div>
-
-  <!-- MODAL: TIMELINE DOS 4 ÚLTIMOS STATUS -->
-  <div class="modal-overlay" id="modalHistorico">
-    <div class="modal-content modal-lg">
-      <div class="modal-header">
-        <div>
-          <h2 id="histProcessoNumero">Histórico de Status</h2>
-          <span class="modal-subtitle" id="histProcessoProjeto"></span>
-        </div>
-        <button class="btn-close" onclick="fecharModalHistorico()">&times;</button>
-      </div>
-      <div class="modal-body">
-        <div class="timeline-intro">
-          <span class="badge-tag">Regra Ativa</span>
-          <span>Exibindo os <strong>4 status mais recentes</strong> do Histórico Completo (reportados nos resumos das 08h, 12h e 16h):</span>
-        </div>
-        <div id="timelineContainer" class="timeline"></div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" onclick="fecharModalHistorico()">Fechar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: PRÉVIA DO RESUMO DIÁRIO -->
-  <div class="modal-overlay" id="modalPreview">
-    <div class="modal-content modal-lg">
-      <div class="modal-header">
-        <h2>Prévia do Resumo de Processos STI</h2>
-        <button class="btn-close" onclick="fecharModalPreview()">&times;</button>
-      </div>
-      <div class="modal-body">
-        <p class="preview-description">Este é o formato exato enviado automaticamente 3 vezes ao dia (08:00, 12:00 e 16:00):</p>
-        <div id="previewHtmlContainer" class="preview-html-box"></div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" onclick="fecharModalPreview()">Fechar</button>
-        <button type="button" class="btn btn-warning" onclick="dispararResumoAgora()">Disparar Agora</button>
-      </div>
     </div>
   </div>
 
@@ -327,34 +299,68 @@
   <div class="modal-overlay" id="modalEditarProjeto">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 id="modalProjetoTitle">Editar Dados do Projeto</h2>
-        <button class="btn-close" onclick="fecharModalProjeto()">&times;</button>
+        <h2>Editar Dados do Projeto</h2>
+        <button class="btn-close" onclick="fecharModalEditarProjeto()">&times;</button>
       </div>
-      <form id="formEditarProjeto" onsubmit="salvarProjeto(event)">
-        <input type="hidden" id="editProjetoId" value="">
-        <div class="modal-body">
-          <div class="form-group">
-            <label for="editProjetoNome">Nome do Projeto *</label>
-            <input type="text" id="editProjetoNome" required placeholder="Digite o nome do projeto">
-          </div>
-          <div class="form-group">
-            <label for="editProjetoDescricao">Descrição / Objeto do Projeto</label>
-            <textarea id="editProjetoDescricao" rows="4" placeholder="Descrição ou itens do projeto..."></textarea>
-          </div>
-          <div id="editProjetoProcessosInfo" style="font-size: 12px; color: #64748b; margin-top: 5px;"></div>
+      <form id="formEditarProjeto" onsubmit="salvarProjetoEdicao(event)">
+        <input type="hidden" id="editProjId">
+        <div class="form-group">
+          <label for="editProjNome">Nome do Projeto *</label>
+          <input type="text" id="editProjNome" required placeholder="Ex: DUARTE JR">
         </div>
-        <div class="modal-footer" style="display: flex; justify-content: space-between;">
-          <button type="button" class="btn btn-danger" onclick="excluirProjetoAtual()">🗑️ Excluir Projeto</button>
-          <div>
-            <button type="button" class="btn btn-secondary" onclick="fecharModalProjeto()">Cancelar</button>
-            <button type="submit" class="btn btn-primary">Salvar Alterações</button>
-          </div>
+        <div class="form-group">
+          <label for="editProjDescricao">Descrição / Objeto do Projeto</label>
+          <textarea id="editProjDescricao" rows="4" placeholder="Descreva o objeto compartilhado por todos os processos deste projeto..."></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-danger" style="margin-right: auto;" onclick="excluirProjetoAtual()">Excluir Projeto</button>
+          <button type="button" class="btn btn-secondary" onclick="fecharModalEditarProjeto()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Atualizar Projeto</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- MODAL: SISTEMAS E CREDENCIAIS -->
+  <!-- MODAL: HISTÓRICO COMPLETO DO PROCESSO -->
+  <div class="modal-overlay" id="modalHistorico">
+    <div class="modal-content modal-content-lg">
+      <div class="modal-header">
+        <div>
+          <h2 id="histProcessoNumero">Histórico do Processo</h2>
+          <p id="histProcessoProjeto" style="font-size: 12px; color: #64748b; margin-top: 2px;"></p>
+        </div>
+        <button class="btn-close" onclick="fecharModalHistorico()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="timelineContainer" class="timeline-box">
+          <!-- Histórico renderizado via JavaScript -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="fecharModalHistorico()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: PRÉVIA DO RELATÓRIO / RESUMO -->
+  <div class="modal-overlay" id="modalPreview">
+    <div class="modal-content modal-content-lg">
+      <div class="modal-header">
+        <h2>Pré-visualização do Resumo Consolidado</h2>
+        <button class="btn-close" onclick="fecharModalPreview()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="previewHtmlContainer" class="preview-html-box">
+          <!-- HTML do e-mail/webhook injetado dinamicamente -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="fecharModalPreview()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: INFORMAÇÕES DOS SISTEMAS -->
   <div class="modal-overlay" id="modalSistemas">
     <div class="modal-content">
       <div class="modal-header">
@@ -390,6 +396,21 @@
     </div>
   </div>
 
+  <!-- SCRIPTS DA APLICAÇÃO -->
   <script src="/js/app.js"></script>
+
+  <!-- ATALHO DE TECLADO CTRL+K / CMD+K -->
+  <script>
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        const searchInput = document.getElementById("filtroTexto");
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+      }
+    });
+  </script>
 </body>
 </html>
