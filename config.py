@@ -33,7 +33,8 @@ HOST = os.environ.get("HOST", "0.0.0.0")
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASS = os.environ.get("ADMIN_PASS", "STIadmin")
 
-# Banco de Dados
+# Banco de Dados (PostgreSQL no Supabase / Nuvem ou SQLite local como fallback)
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 DATABASE_FILE = BASE_DIR / "processos_sti.db"
 
 # Horários de Envio Automático

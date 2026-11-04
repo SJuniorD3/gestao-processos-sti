@@ -1,13 +1,111 @@
 import sqlite3
 import datetime
+import os
 from pathlib import Path
-from config import DATABASE_FILE
+from config import DATABASE_FILE, DATABASE_URL
+
+try:
+    import psycopg2
+    import psycopg2.extras
+except ImportError:
+    psycopg2 = None
+
+def get_is_postgres():
+    return bool(DATABASE_URL and psycopg2)
+
+class UniversalCursor:
+    def __init__(self, raw_cursor, is_postgres=False):
+        self.cursor = raw_cursor
+        self.is_postgres = is_postgres
+        self.lastrowid = None
+
+    def execute(self, query, params=None):
+        if self.is_postgres:
+            # Substitui placeholders ? por %s para PostgreSQL
+            pg_query = query.replace("?", "%s")
+            stripped = pg_query.strip().rstrip(";")
+            
+            # Se for INSERT e precisa capturar lastrowid
+            if stripped.upper().startswith("INSERT INTO") and "RETURNING" not in stripped.upper():
+                pg_query = stripped + " RETURNING id"
+                if params is not None:
+                    self.cursor.execute(pg_query, params)
+                else:
+                    self.cursor.execute(pg_query)
+                row = self.cursor.fetchone()
+                if row:
+                    self.lastrowid = row["id"] if isinstance(row, dict) else row[0]
+                return self
+            
+            if params is not None:
+                self.cursor.execute(pg_query, params)
+            else:
+                self.cursor.execute(pg_query)
+            return self
+        else:
+            if params is not None:
+                self.cursor.execute(query, params)
+            else:
+                self.cursor.execute(query)
+            self.lastrowid = getattr(self.cursor, "lastrowid", None)
+            return self
+
+    def fetchone(self):
+        row = self.cursor.fetchone()
+        if row is None:
+            return None
+        return dict(row)
+
+    def fetchall(self):
+        rows = self.cursor.fetchall()
+        return [dict(r) for r in rows]
+
+    @property
+    def rowcount(self):
+        return self.cursor.rowcount
+
+class UniversalConnection:
+    def __init__(self, raw_conn, is_postgres=False):
+        self.conn = raw_conn
+        self.is_postgres = is_postgres
+
+    def cursor(self):
+        if self.is_postgres:
+            return UniversalCursor(self.conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor), is_postgres=True)
+        else:
+            return UniversalCursor(self.conn.cursor(), is_postgres=False)
+
+    def commit(self):
+        self.conn.commit()
+
+    def rollback(self):
+        self.conn.rollback()
+
+    def close(self):
+        self.conn.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None:
+            self.rollback()
+        else:
+            self.commit()
+        self.close()
 
 def get_connection():
-    conn = sqlite3.connect(DATABASE_FILE)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    if get_is_postgres():
+        url = DATABASE_URL
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        raw = psycopg2.connect(url, sslmode="require")
+        return UniversalConnection(raw, is_postgres=True)
+    else:
+        raw = sqlite3.connect(DATABASE_FILE)
+        raw.row_factory = sqlite3.Row
+        raw.execute("PRAGMA foreign_keys = ON")
+        return UniversalConnection(raw, is_postgres=False)
 
 def parse_date(date_str):
     if not date_str or date_str == "-":
@@ -76,61 +174,116 @@ def init_db():
     with get_connection() as conn:
         cursor = conn.cursor()
         
-        # 1. Tabela de Projetos (Um projeto pode conter múltiplos processos SEI e STARTGOV)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS projetos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome TEXT NOT NULL UNIQUE,
-                descricao TEXT,
-                criado_em TEXT DEFAULT (datetime('now', 'localtime'))
-            )
-        """)
+        if conn.is_postgres:
+            # 1. Tabela de Projetos (PostgreSQL / Supabase)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS projetos (
+                    id SERIAL PRIMARY KEY,
+                    nome TEXT NOT NULL UNIQUE,
+                    descricao TEXT,
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
 
-        # 2. Tabela de Processos vinculados a um Projeto
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS processos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                projeto_id INTEGER NOT NULL,
-                sistema TEXT NOT NULL,
-                numero_processo TEXT NOT NULL UNIQUE,
-                local_atual TEXT,
-                acao TEXT,
-                data_recebimento TEXT,
-                situacao TEXT,
-                monitorar INTEGER DEFAULT 1,
-                criado_em TEXT DEFAULT (datetime('now', 'localtime')),
-                atualizado_em TEXT DEFAULT (datetime('now', 'localtime')),
-                FOREIGN KEY (projeto_id) REFERENCES projetos(id) ON DELETE CASCADE
-            )
-        """)
+            # 2. Tabela de Processos
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS processos (
+                    id SERIAL PRIMARY KEY,
+                    projeto_id INTEGER NOT NULL REFERENCES projetos(id) ON DELETE CASCADE,
+                    sistema TEXT NOT NULL,
+                    numero_processo TEXT NOT NULL UNIQUE,
+                    local_atual TEXT,
+                    acao TEXT,
+                    data_recebimento TEXT,
+                    situacao TEXT,
+                    monitorar INTEGER DEFAULT 1,
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
 
-        # 3. Tabela de Histórico de Status
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS historico_status (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                processo_id INTEGER NOT NULL,
-                data_registro TEXT DEFAULT (datetime('now', 'localtime')),
-                data_movimentacao TEXT,
-                local TEXT,
-                situacao TEXT,
-                acao TEXT,
-                observacao TEXT,
-                FOREIGN KEY (processo_id) REFERENCES processos(id) ON DELETE CASCADE
-            )
-        """)
+            # 3. Tabela de Histórico de Status
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS historico_status (
+                    id SERIAL PRIMARY KEY,
+                    processo_id INTEGER NOT NULL REFERENCES processos(id) ON DELETE CASCADE,
+                    data_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    data_movimentacao TEXT,
+                    local TEXT,
+                    situacao TEXT,
+                    acao TEXT,
+                    observacao TEXT
+                )
+            """)
 
-        # 4. Tabela de Relatórios Gerados
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS relatorios_gerados (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                data_hora TEXT DEFAULT (datetime('now', 'localtime')),
-                tipo TEXT,
-                total_processos INTEGER,
-                destinatarios TEXT,
-                status TEXT,
-                conteudo TEXT
-            )
-        """)
+            # 4. Tabela de Relatórios Gerados
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS relatorios_gerados (
+                    id SERIAL PRIMARY KEY,
+                    data_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    tipo TEXT,
+                    total_processos INTEGER,
+                    destinatarios TEXT,
+                    status TEXT,
+                    conteudo TEXT
+                )
+            """)
+        else:
+            # 1. Tabela de Projetos (SQLite)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS projetos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nome TEXT NOT NULL UNIQUE,
+                    descricao TEXT,
+                    criado_em TEXT DEFAULT (datetime('now', 'localtime'))
+                )
+            """)
+
+            # 2. Tabela de Processos vinculados a um Projeto
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS processos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    projeto_id INTEGER NOT NULL,
+                    sistema TEXT NOT NULL,
+                    numero_processo TEXT NOT NULL UNIQUE,
+                    local_atual TEXT,
+                    acao TEXT,
+                    data_recebimento TEXT,
+                    situacao TEXT,
+                    monitorar INTEGER DEFAULT 1,
+                    criado_em TEXT DEFAULT (datetime('now', 'localtime')),
+                    atualizado_em TEXT DEFAULT (datetime('now', 'localtime')),
+                    FOREIGN KEY (projeto_id) REFERENCES projetos(id) ON DELETE CASCADE
+                )
+            """)
+
+            # 3. Tabela de Histórico de Status
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS historico_status (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    processo_id INTEGER NOT NULL,
+                    data_registro TEXT DEFAULT (datetime('now', 'localtime')),
+                    data_movimentacao TEXT,
+                    local TEXT,
+                    situacao TEXT,
+                    acao TEXT,
+                    observacao TEXT,
+                    FOREIGN KEY (processo_id) REFERENCES processos(id) ON DELETE CASCADE
+                )
+            """)
+
+            # 4. Tabela de Relatórios Gerados
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS relatorios_gerados (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    data_hora TEXT DEFAULT (datetime('now', 'localtime')),
+                    tipo TEXT,
+                    total_processos INTEGER,
+                    destinatarios TEXT,
+                    status TEXT,
+                    conteudo TEXT
+                )
+            """)
 
         # Migração e normalização automática de datas para dia/mês/ano (DD/MM/AAAA)
         try:
@@ -476,7 +629,7 @@ def atualizar_processo(processo_id, dados, registrar_novo_status=True):
                 data_recebimento = ?,
                 situacao = ?,
                 monitorar = ?,
-                atualizado_em = datetime('now', 'localtime')
+                atualizado_em = CURRENT_TIMESTAMP
             WHERE id = ?
         """, (
             projeto_id,
