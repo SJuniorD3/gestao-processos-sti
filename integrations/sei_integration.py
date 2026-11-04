@@ -1,8 +1,18 @@
 import re
 import datetime
+import socket
 from urllib.parse import urljoin
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from config import SEI_URL, SEI_USER, SEI_PASS
+
+# Força resolução estritamente IPv4 em containers/cloud (evita Errno 101: Network is unreachable)
+try:
+    import urllib3.util.connection as urllib3_cn
+    urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
+except Exception:
+    pass
 
 class SEIIntegration:
     """
@@ -36,9 +46,18 @@ class SEIIntegration:
     def _obter_sessao(self):
         if self.session is None:
             self.session = requests.Session()
+            retry_strategy = Retry(
+                total=2,
+                backoff_factor=0.5,
+                status_forcelist=[500, 502, 503, 504]
+            )
+            adapter = HTTPAdapter(max_retries=retry_strategy)
+            self.session.mount("https://", adapter)
+            self.session.mount("http://", adapter)
             self.session.headers.update({
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
                 "Connection": "keep-alive"
             })
         return self.session
@@ -50,10 +69,13 @@ class SEIIntegration:
         if self.is_authenticated and not forcar and self.main_page_html:
             return True, "Sessão já autenticada no SEI"
 
+        if not self.username or not self.password:
+            return False, "Credenciais do SEI (SEI_USER e SEI_PASS) não configuradas no servidor."
+
         session = self._obter_sessao()
         try:
             # 1. Carrega página inicial do login SIP
-            resp_login = session.get(self.login_url, timeout=15)
+            resp_login = session.get(self.login_url, timeout=12)
             if resp_login.status_code != 200:
                 return False, f"Falha ao carregar tela de login do SEI (HTTP {resp_login.status_code})"
 
@@ -80,7 +102,7 @@ class SEIIntegration:
                 "Referer": self.login_url
             }
 
-            resp_auth = session.post(self.login_url, data=payload, headers=headers_post, timeout=20, allow_redirects=True)
+            resp_auth = session.post(self.login_url, data=payload, headers=headers_post, timeout=15, allow_redirects=True)
 
             # Verifica mensagens de validação / erro exibidas pelo SIP
             m_validacao = re.search(r'<textarea[^>]*id=[\'"]txaInfraValidacao[\'"][^>]*>(.*?)</textarea>', resp_auth.text, re.DOTALL | re.I)
@@ -99,7 +121,12 @@ class SEIIntegration:
 
         except requests.exceptions.RequestException as e:
             self.is_authenticated = False
-            return False, f"Erro de conexão com o SEI: {str(e)}"
+            err_str = str(e)
+            if "Network is unreachable" in err_str or "101" in err_str:
+                return False, "Rede estadual inacessível ao portal SEI (sip.sei.ma.gov.br). O firewall governamental pode estar restringindo conexões externas da nuvem."
+            elif "timed out" in err_str.lower():
+                return False, "Tempo limite esgotado ao conectar ao portal do SEI (sip.sei.ma.gov.br)."
+            return False, f"Erro de conexão com o SEI: {err_str}"
         except Exception as e:
             self.is_authenticated = False
             return False, f"Erro no processo de login do SEI: {str(e)}"

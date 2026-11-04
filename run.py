@@ -1,6 +1,13 @@
 import sys
 import socketserver
 import os
+import socket
+
+try:
+    import urllib3.util.connection as urllib3_cn
+    urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
+except Exception:
+    pass
 
 # Garante saída compatível com UTF-8 no terminal Windows
 if sys.stdout and hasattr(sys.stdout, "reconfigure"):

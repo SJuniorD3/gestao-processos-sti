@@ -10,6 +10,13 @@ import hmac
 import hashlib
 import time
 import base64
+import socket
+
+try:
+    import urllib3.util.connection as urllib3_cn
+    urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
+except Exception:
+    pass
 
 from config import PORT, HOST, BASE_DIR, ADMIN_USER, ADMIN_PASS
 from database import (

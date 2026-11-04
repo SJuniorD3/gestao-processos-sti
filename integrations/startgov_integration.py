@@ -1,8 +1,18 @@
 import re
 import datetime
+import socket
 import urllib.parse
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from config import STARTGOV_URL, STARTGOV_USER, STARTGOV_PASS
+
+# Força resolução estritamente IPv4 em containers/cloud (evita Errno 101: Network is unreachable)
+try:
+    import urllib3.util.connection as urllib3_cn
+    urllib3_cn.allowed_gai_family = lambda: socket.AF_INET
+except Exception:
+    pass
 
 class StartGovIntegration:
     """
@@ -39,6 +49,14 @@ class StartGovIntegration:
     def _obter_sessao(self):
         if self.session is None:
             self.session = requests.Session()
+            retry_strategy = Retry(
+                total=2,
+                backoff_factor=0.5,
+                status_forcelist=[500, 502, 503, 504]
+            )
+            adapter = HTTPAdapter(max_retries=retry_strategy)
+            self.session.mount("https://", adapter)
+            self.session.mount("http://", adapter)
             self.session.headers.update({
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
                 "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
@@ -84,6 +102,9 @@ class StartGovIntegration:
         if self.token and not forcar:
             return True, "Sessão já ativa no STARTGOV"
 
+        if not self.username or not self.password:
+            return False, "Credenciais do STARTGOV (STARTGOV_USER e STARTGOV_PASS) não configuradas no servidor."
+
         session = self._obter_sessao()
         url_auth = f"{self.api_base}/auth/login"
         payload = {
@@ -111,7 +132,12 @@ class StartGovIntegration:
             else:
                 return False, f"Falha de autenticação no STARTGOV (HTTP {resp.status_code})"
         except requests.exceptions.RequestException as e:
-            return False, f"Erro de conexão com STARTGOV: {str(e)}"
+            err_str = str(e)
+            if "Network is unreachable" in err_str or "101" in err_str:
+                return False, "Rede inacessível ao portal STARTGOV. O firewall governamental pode estar bloqueando a nuvem."
+            elif "timed out" in err_str.lower():
+                return False, "Tempo limite esgotado ao conectar ao STARTGOV."
+            return False, f"Erro de conexão com STARTGOV: {err_str}"
         except Exception as e:
             return False, f"Erro ao autenticar no STARTGOV: {str(e)}"
 
