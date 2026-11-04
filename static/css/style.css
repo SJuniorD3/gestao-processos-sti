@@ -1413,3 +1413,69 @@ body {
     max-width: none;
   }
 }
+
+/* ==========================================================================
+   ESTILOS DE DOCUMENTOS & PEÇAS DO SEI (ITEM 5)
+   ========================================================================== */
+.btn-pecas-sei {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+.btn-pecas-sei:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+.btn-pecas-sei.com-docs {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.documento-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  gap: 12px;
+}
+.documento-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+}
+
+.doc-badge-tipo {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  margin-bottom: 2px;
+}
+
+.doc-tipo-tr { background: #dcfce7; color: #15803d; }
+.doc-tipo-parecer { background: #ede9fe; color: #6d28d9; }
+.doc-tipo-despacho { background: #dbeafe; color: #1e40af; }
+.doc-tipo-empenho { background: #fef3c7; color: #92400e; }
+.doc-tipo-oficio { background: #e0f2fe; color: #0369a1; }
+.doc-tipo-edital { background: #ffedd5; color: #c2410c; }
+.doc-tipo-contrato { background: #fae8ff; color: #86198f; }
+.doc-tipo-certidao { background: #f1f5f9; color: #475569; }
+.doc-tipo-padrao { background: #f1f5f9; color: #475569; }

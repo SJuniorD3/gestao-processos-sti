@@ -409,10 +409,15 @@ function renderizarTabela(listaProjetos) {
           <td class="text-center">${dataRec}</td>
           <td>${escapeHtml(p.situacao || "-")}</td>
           <td class="text-center" style="font-weight: 600;">${dias}</td>
-          <td class="text-center">
-            <button class="btn-status-4" onclick="abrirHistoricoProcesso(${p.id})">
-              📜 4 Status
-            </button>
+          <td class="text-center" style="white-space: nowrap;">
+            <div style="display: flex; flex-direction: column; gap: 4px; align-items: center;">
+              <button class="btn-status-4" onclick="abrirHistoricoProcesso(${p.id})">
+                📜 4 Status
+              </button>
+              <button class="btn-pecas-sei ${p.total_documentos ? 'com-docs' : ''}" onclick="abrirModalDocumentos(${p.id})" title="Ver peças e documentos anexados no SEI">
+                📎 ${p.total_documentos || 0} Peças
+              </button>
+            </div>
           </td>
           <td class="text-center">
             ${botoesAcao}
@@ -652,6 +657,9 @@ function renderizarTimelineVisual(listaProjetos) {
 
             <div style="display: flex; align-items: center; gap: 8px;">
               ${badgeSla}
+              <button class="btn btn-sm btn-outline" style="padding: 2px 7px; font-size: 11px;" onclick="abrirModalDocumentos(${p.id})" title="Ver peças e documentos anexados no SEI">
+                📎 Peças (${p.total_documentos || 0})
+              </button>
               <button class="btn-icon-action" title="Sincronizar no portal" onclick="sincronizarProcessoWeb(${p.id})">🔄</button>
               <button class="btn-icon-action" title="Editar processo" onclick="abrirModalEditarProcesso(${p.id})">✏️</button>
               <button class="btn-icon-action" title="Excluir processo" onclick="confirmarExclusao(${p.id}, '${escapeHtml(p.numero_processo)}')">🗑️</button>
@@ -2191,4 +2199,234 @@ async function carregarMetricasGargalos() {
     containerSetores.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Falha ao carregar métricas.</div>`;
     containerTop.innerHTML = `<div style="color: #ef4444; font-size: 12px;">Falha ao carregar métricas.</div>`;
   }
+}
+
+// -------------------------------------------------------------
+// RASTREIO E GESTÃO DE DOCUMENTOS & ANEXOS DO SEI (ITEM 5)
+// -------------------------------------------------------------
+let processoDocumentosAtual = null;
+let documentosProcessoCache = [];
+
+async function abrirModalDocumentos(procId) {
+  const p = todosProcessos.find(x => x.id === procId);
+  if (!p) return;
+  processoDocumentosAtual = p;
+
+  const modal = document.getElementById("modalDocumentosProcesso");
+  const sub = document.getElementById("docModalSubtitle");
+  const formBox = document.getElementById("boxFormNovoDoc");
+  const formProcId = document.getElementById("docFormProcId");
+
+  if (sub) {
+    sub.innerHTML = `Processo: <strong style="color: #0f172a; font-family: monospace;">${escapeHtml(p.numero_processo)}</strong> &bull; Sistema: <strong>${escapeHtml(p.sistema)}</strong> &bull; Projeto: <strong>${escapeHtml(p.projeto)}</strong>`;
+  }
+  if (formProcId) formProcId.value = p.id;
+  if (formBox) formBox.style.display = "none";
+
+  modal.style.display = "flex";
+  await carregarDocumentosProcesso(p.id);
+}
+
+function fecharModalDocumentos() {
+  const modal = document.getElementById("modalDocumentosProcesso");
+  if (modal) modal.style.display = "none";
+  processoDocumentosAtual = null;
+}
+
+function toggleFormAnexoManual(forcar) {
+  const box = document.getElementById("boxFormNovoDoc");
+  if (!box) return;
+  if (typeof forcar === "boolean") {
+    box.style.display = forcar ? "block" : "none";
+  } else {
+    box.style.display = box.style.display === "none" ? "block" : "none";
+  }
+  if (box.style.display === "block") {
+    const nomeInput = document.getElementById("docNome");
+    if (nomeInput) nomeInput.focus();
+  }
+}
+
+function obterClasseBadgeDoc(tipo) {
+  const t = (tipo || "").toLowerCase();
+  if (t.includes("termo") || t.includes("tr")) return "doc-tipo-tr";
+  if (t.includes("parecer") || t.includes("nota técnica")) return "doc-tipo-parecer";
+  if (t.includes("despacho") || t.includes("decisão")) return "doc-tipo-despacho";
+  if (t.includes("empenho") || t.includes("financeir")) return "doc-tipo-empenho";
+  if (t.includes("ofício") || t.includes("oficio") || t.includes("memorando")) return "doc-tipo-oficio";
+  if (t.includes("edital") || t.includes("licita")) return "doc-tipo-edital";
+  if (t.includes("contrato") || t.includes("minuta")) return "doc-tipo-contrato";
+  if (t.includes("certidão") || t.includes("certidao")) return "doc-tipo-certidao";
+  return "doc-tipo-padrao";
+}
+
+async function carregarDocumentosProcesso(procId) {
+  const container = document.getElementById("listaDocsContainer");
+  const badgeTotal = document.getElementById("badgeTotalDocs");
+  if (!container) return;
+
+  container.innerHTML = `<div style="text-align: center; color: #64748b; font-size: 12.5px; padding: 24px;">Carregando peças processuais...</div>`;
+
+  try {
+    const res = await fetch(`/api/processos/${procId}/documentos`);
+    const json = await res.json();
+    if (json.success) {
+      documentosProcessoCache = json.data || [];
+      if (badgeTotal) badgeTotal.textContent = documentosProcessoCache.length;
+
+      if (documentosProcessoCache.length === 0) {
+        container.innerHTML = `
+          <div style="background: #ffffff; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 32px 20px; text-align: center; color: #64748b;">
+            <div style="font-size: 34px; margin-bottom: 8px;">📂</div>
+            <strong style="color: #0f172a; font-size: 14px; display: block; margin-bottom: 4px;">Nenhuma peça registrada ainda</strong>
+            <p style="font-size: 12px; margin-bottom: 14px;">Você pode capturar automaticamente todas as peças clicando em <strong>"Rastrear no SEI Agora"</strong> ou adicionar uma manualmente.</p>
+            <button class="btn btn-sm btn-primary" onclick="rastrearDocumentosSEI()">
+              🔄 Rastrear no SEI Agora
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      let html = "";
+      documentosProcessoCache.forEach(doc => {
+        const clsBadge = obterClasseBadgeDoc(doc.tipo_documento);
+        const linkBtn = doc.link_visualizacao
+          ? `<a href="${escapeHtml(doc.link_visualizacao)}" target="_blank" class="btn btn-sm btn-outline" style="font-size: 11px; padding: 2px 8px; color: #2563eb; text-decoration: none;">Abrir Peça ↗</a>`
+          : `<span style="font-size: 11px; color: #94a3b8; font-style: italic;">Juntado aos autos</span>`;
+
+        const numSeiHtml = doc.numero_sei
+          ? `<div style="display: flex; align-items: center; gap: 4px; margin-top: 3px;">
+               <span style="font-size: 11px; color: #64748b; font-family: monospace;">Nº SEI: <strong>${escapeHtml(doc.numero_sei)}</strong></span>
+               <button class="btn-copy-mini" onclick="copiarTexto('${escapeHtml(doc.numero_sei)}', this)" title="Copiar número SEI">📋</button>
+             </div>`
+          : "";
+
+        const isLeitor = usuarioLogado && usuarioLogado.perfil === "leitor";
+
+        html += `
+          <div class="documento-card">
+            <div style="flex: 1; min-width: 0;">
+              <div>
+                <span class="doc-badge-tipo ${clsBadge}">${escapeHtml(doc.tipo_documento || "Documento")}</span>
+              </div>
+              <strong style="font-size: 13px; color: #0f172a; display: block; line-height: 1.35; margin-top: 2px;">
+                ${escapeHtml(doc.nome_exibicao)}
+              </strong>
+              ${numSeiHtml}
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              ${linkBtn}
+              ${!isLeitor ? `
+                <button class="btn-icon-action" style="font-size: 13px; color: #dc2626;" title="Remover peça" onclick="excluirDocumento(${doc.id})">
+                  🗑️
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+    } else {
+      container.innerHTML = `<div style="color: #dc2626; font-size: 12.5px; text-align: center;">Erro ao carregar peças: ${escapeHtml(json.error)}</div>`;
+    }
+  } catch (err) {
+    container.innerHTML = `<div style="color: #dc2626; font-size: 12.5px; text-align: center;">Falha de comunicação com o servidor.</div>`;
+  }
+}
+
+async function rastrearDocumentosSEI() {
+  if (!processoDocumentosAtual) return;
+  const btn = document.getElementById("btnRastrearSEI");
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = `<span class="icon-sync-spin">🔄</span> Rastreando no SEI...`;
+
+  showToast(`Consultando árvore de documentos do processo ${processoDocumentosAtual.numero_processo}...`, "info", 4000);
+
+  try {
+    const res = await fetch(`/api/processos/${processoDocumentosAtual.id}/documentos/rastrear-sei`, { method: "POST" });
+    const json = await res.json();
+    if (json.sucesso) {
+      const total = json.total || (json.documentos ? json.documentos.length : 0);
+      showToast(`✓ Rastreio concluído! ${total} peça(s) identificada(s) no SEI.`, "sucesso");
+      await carregarDocumentosProcesso(processoDocumentosAtual.id);
+      carregarDados();
+    } else {
+      showToast("Aviso do SEI: " + (json.mensagem || "Não foi possível rastrear as peças"), "alerta");
+    }
+  } catch (err) {
+    showToast("Falha de conexão ao rastrear documentos no SEI.", "erro");
+  } finally {
+    btn.innerHTML = origHtml;
+    btn.disabled = false;
+  }
+}
+
+async function salvarDocumentoManual(e) {
+  e.preventDefault();
+  if (!processoDocumentosAtual) return;
+
+  const nome = document.getElementById("docNome").value.trim();
+  const tipo = document.getElementById("docTipo").value;
+  const numSei = document.getElementById("docNumeroSEI").value.trim();
+  const link = document.getElementById("docLink").value.trim();
+
+  if (!nome) {
+    showToast("O título/descrição da peça é obrigatório.", "alerta");
+    return;
+  }
+
+  try {
+    const res = await fetch(`/api/processos/${processoDocumentosAtual.id}/documentos`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        nome_exibicao: nome,
+        tipo_documento: tipo,
+        numero_sei: numSei,
+        link_visualizacao: link
+      })
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast("✓ Peça registrada com sucesso!", "sucesso");
+      document.getElementById("formNovoDoc").reset();
+      toggleFormAnexoManual(false);
+      await carregarDocumentosProcesso(processoDocumentosAtual.id);
+      carregarDados();
+    } else {
+      showToast("Erro ao adicionar peça: " + json.error, "erro");
+    }
+  } catch (err) {
+    showToast("Erro de conexão ao salvar documento.", "erro");
+  }
+}
+
+async function excluirDocumento(docId) {
+  mostrarConfirmacao({
+    titulo: "Remover Peça",
+    mensagem: "Deseja realmente remover esta peça da lista de documentos deste processo?",
+    icone: "🗑️",
+    textoConfirmar: "Sim, Remover",
+    tipo: "danger",
+    aoConfirmar: async () => {
+      try {
+        const res = await fetch(`/api/documentos/${docId}`, { method: "DELETE" });
+        const json = await res.json();
+        if (json.success) {
+          showToast("✓ Peça removida com sucesso!", "sucesso");
+          if (processoDocumentosAtual) {
+            await carregarDocumentosProcesso(processoDocumentosAtual.id);
+            carregarDados();
+          }
+        } else {
+          showToast("Erro ao remover: " + json.error, "erro");
+        }
+      } catch (err) {
+        showToast("Falha ao comunicar com o servidor.", "erro");
+      }
+    }
+  });
 }

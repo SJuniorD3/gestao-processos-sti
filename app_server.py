@@ -18,7 +18,8 @@ from database import (
     formatar_data_br, formatar_data_hora_br,
     obter_usuario_por_login, obter_usuario_por_id, listar_usuarios, criar_usuario, atualizar_usuario, excluir_usuario,
     registrar_auditoria, listar_auditoria, verificar_senha,
-    obter_processo_por_numero, obter_metricas_gargalos
+    obter_processo_por_numero, obter_metricas_gargalos,
+    listar_documentos_processo, salvar_documentos_processo, adicionar_documento_manual, excluir_documento_processo
 )
 from scheduler import scheduler
 from notifier import gerar_conteudo_resumo, gerar_relatorio_executivo_formal_html
@@ -200,6 +201,16 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                     self._send_json({"success": False, "error": "Projeto não encontrado"}, 404)
             except ValueError:
                 self._send_json({"success": False, "error": "ID de projeto inválido"}, 400)
+            return
+
+        # Rota da API: Documentos e Peças de um Processo
+        if path.startswith("/api/processos/") and path.endswith("/documentos"):
+            try:
+                proc_id = int(path.split("/")[3])
+                docs = listar_documentos_processo(proc_id)
+                self._send_json({"success": True, "data": docs, "total": len(docs)})
+            except ValueError:
+                self._send_json({"success": False, "error": "ID de processo inválido"}, 400)
             return
 
         # Rota da API: Detalhes do Processo (incluindo histórico completo)
@@ -613,6 +624,52 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json({"success": False, "error": str(e)}, 500)
             return
 
+        # Rastrear Documentos do Processo no SEI em Tempo Real
+        if path.startswith("/api/processos/") and path.endswith("/documentos/rastrear-sei"):
+            curr = self._require_role("admin", "operador")
+            if not curr:
+                return
+            try:
+                proc_id = int(path.split("/")[3])
+                proc = obter_processo(proc_id)
+                if not proc:
+                    self._send_json({"success": False, "error": "Processo não encontrado"}, 404)
+                    return
+
+                res_sei = sei_client.rastrear_documentos_processo(proc["numero_processo"])
+                if res_sei.get("sucesso") and res_sei.get("documentos"):
+                    salvar_documentos_processo(proc_id, res_sei["documentos"])
+                    registrar_auditoria(
+                        curr["usuario"],
+                        "RASTREAR_DOCUMENTOS_SEI",
+                        f"Rastreou {len(res_sei['documentos'])} peças do processo {proc['numero_processo']}",
+                        self._get_client_ip()
+                    )
+                self._send_json(res_sei)
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 500)
+            return
+
+        # Adicionar Documento/Peça Manual ao Processo
+        if path.startswith("/api/processos/") and path.endswith("/documentos"):
+            curr = self._require_role("admin", "operador")
+            if not curr:
+                return
+            try:
+                proc_id = int(path.split("/")[3])
+                dados = self._read_json()
+                doc_id = adicionar_documento_manual(proc_id, dados)
+                registrar_auditoria(
+                    curr["usuario"],
+                    "ANEXAR_DOCUMENTO",
+                    f"Anexou peça '{dados.get('nome_exibicao')}' ao processo ID {proc_id}",
+                    self._get_client_ip()
+                )
+                self._send_json({"success": True, "id": doc_id, "message": "Documento adicionado com sucesso!"}, 201)
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 400)
+            return
+
         # Testar Credenciais e Conexão dos Robôs SEI e STARTGOV
         if path == "/api/sistemas/testar":
             curr = self._require_role("admin")
@@ -775,6 +832,23 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                     self._send_json({"success": True, "message": "Processo removido com sucesso!"})
                 else:
                     self._send_json({"success": False, "error": "Processo não encontrado"}, 404)
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 400)
+            return
+
+        # Excluir Documento/Peça do Processo
+        if path.startswith("/api/documentos/"):
+            curr = self._require_role("admin", "operador")
+            if not curr:
+                return
+            try:
+                doc_id = int(path.split("/")[-1])
+                ok = excluir_documento_processo(doc_id)
+                if ok:
+                    registrar_auditoria(curr["usuario"], "EXCLUIR_DOCUMENTO", f"Removeu peça ID {doc_id}", self._get_client_ip())
+                    self._send_json({"success": True, "message": "Documento removido com sucesso!"})
+                else:
+                    self._send_json({"success": False, "error": "Documento não encontrado"}, 404)
             except Exception as e:
                 self._send_json({"success": False, "error": str(e)}, 400)
             return

@@ -8,7 +8,8 @@ if sys.stdout and hasattr(sys.stdout, "reconfigure"):
         pass
 
 from database import (
-    listar_processos, obter_processo, atualizar_processo, salvar_historico_4_status, get_connection
+    listar_processos, obter_processo, atualizar_processo, salvar_historico_4_status, get_connection,
+    salvar_documentos_processo
 )
 from integrations import sei_client, startgov_client
 
@@ -65,6 +66,9 @@ def executar_monitoramento_processos(callback_progresso=None):
                 atualizar_processo(proc["id"], dados_atualizados, registrar_novo_status=False)
             else:
                 atualizar_processo(proc["id"], dados_atualizados, registrar_novo_status=True)
+
+            if resultado.get("documentos"):
+                salvar_documentos_processo(proc["id"], resultado["documentos"])
 
             atualizados += 1
             detalhes.append({
@@ -129,6 +133,9 @@ def monitorar_processo_individual(processo_id):
             atualizar_processo(proc["id"], dados_atualizados, registrar_novo_status=False)
         else:
             atualizar_processo(proc["id"], dados_atualizados, registrar_novo_status=True)
+
+        if res.get("documentos"):
+            salvar_documentos_processo(proc["id"], res["documentos"])
 
         return {
             "sucesso": True,

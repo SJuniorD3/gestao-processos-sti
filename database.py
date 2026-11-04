@@ -270,6 +270,21 @@ def init_db():
                     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            # 7. Tabela de Documentos / Peças do Processo (PostgreSQL)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS documentos_processo (
+                    id SERIAL PRIMARY KEY,
+                    processo_id INTEGER NOT NULL REFERENCES processos(id) ON DELETE CASCADE,
+                    numero_sei TEXT,
+                    tipo_documento TEXT,
+                    nome_exibicao TEXT NOT NULL,
+                    data_documento TEXT,
+                    unidade_geradora TEXT,
+                    link_visualizacao TEXT,
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
         else:
             # 1. Tabela de Projetos (SQLite)
             cursor.execute("""
@@ -349,6 +364,22 @@ def init_db():
                     detalhes TEXT,
                     ip TEXT,
                     criado_em TEXT DEFAULT (datetime('now', 'localtime'))
+                )
+            """)
+
+            # 7. Tabela de Documentos / Peças do Processo (SQLite)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS documentos_processo (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    processo_id INTEGER NOT NULL,
+                    numero_sei TEXT,
+                    tipo_documento TEXT,
+                    nome_exibicao TEXT NOT NULL,
+                    data_documento TEXT,
+                    unidade_geradora TEXT,
+                    link_visualizacao TEXT,
+                    criado_em TEXT DEFAULT (datetime('now', 'localtime')),
+                    FOREIGN KEY (processo_id) REFERENCES processos(id) ON DELETE CASCADE
                 )
             """)
 
@@ -619,6 +650,12 @@ def listar_projetos_com_processos(apenas_monitorados=False):
                         h_dict["data_movimentacao"] = formatar_data_hora_br(h_dict["data_movimentacao"])
                     status_list.append(h_dict)
                 proc["ultimos_4_status"] = status_list
+
+                # Contagem de documentos/peças anexadas
+                cursor.execute("SELECT COUNT(*) AS total FROM documentos_processo WHERE processo_id = ?", (proc["id"],))
+                doc_row = cursor.fetchone()
+                proc["total_documentos"] = doc_row["total"] if doc_row else 0
+
                 processos_list.append(proc)
 
             # Se pediu apenas monitorados e o projeto não tem nenhum processo monitorado ativo, pula
@@ -683,6 +720,12 @@ def listar_processos(apenas_monitorados=False):
                     h_dict["data_movimentacao"] = formatar_data_hora_br(h_dict["data_movimentacao"])
                 status_list.append(h_dict)
             proc["ultimos_4_status"] = status_list
+
+            # Contagem de documentos/peças anexadas
+            cursor.execute("SELECT COUNT(*) AS total FROM documentos_processo WHERE processo_id = ?", (proc["id"],))
+            doc_row = cursor.fetchone()
+            proc["total_documentos"] = doc_row["total"] if doc_row else 0
+
             resultado.append(proc)
 
         return resultado
@@ -1039,3 +1082,76 @@ def obter_metricas_gargalos():
             for p in top_atrasados
         ]
     }
+
+# -------------------------------------------------------------
+# DOCUMENTOS E PEÇAS DO PROCESSO (SEI & ANEXOS)
+# -------------------------------------------------------------
+def salvar_documentos_processo(processo_id, lista_documentos):
+    """
+    Substitui ou atualiza os documentos/peças associadas a um processo.
+    """
+    if not processo_id or lista_documentos is None:
+        return 0
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM documentos_processo WHERE processo_id = ?", (processo_id,))
+        
+        inseridos = 0
+        for doc in lista_documentos:
+            nome = str(doc.get("nome_exibicao") or doc.get("nome") or "Documento").strip()
+            num_sei = str(doc.get("numero_sei") or "").strip()
+            tipo = str(doc.get("tipo_documento") or doc.get("tipo") or "Documento").strip()
+            dt_doc = str(doc.get("data_documento") or doc.get("data") or "").strip()
+            unidade = str(doc.get("unidade_geradora") or doc.get("unidade") or "").strip()
+            link = str(doc.get("link_visualizacao") or doc.get("link") or "").strip()
+
+            cursor.execute("""
+                INSERT INTO documentos_processo (processo_id, numero_sei, tipo_documento, nome_exibicao, data_documento, unidade_geradora, link_visualizacao)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (processo_id, num_sei, tipo, nome, dt_doc, unidade, link))
+            inseridos += 1
+
+        conn.commit()
+        return inseridos
+
+def listar_documentos_processo(processo_id):
+    """Retorna todas as peças/documentos de um processo."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, processo_id, numero_sei, tipo_documento, nome_exibicao, data_documento, unidade_geradora, link_visualizacao, criado_em
+            FROM documentos_processo
+            WHERE processo_id = ?
+            ORDER BY id ASC
+        """, (processo_id,))
+        return [dict(r) for r in cursor.fetchall()]
+
+def adicionar_documento_manual(processo_id, dados):
+    """Permite anexar manualmente um documento/peça relevante."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        nome = str(dados.get("nome_exibicao") or dados.get("nome") or "").strip()
+        if not nome:
+            raise ValueError("O nome do documento é obrigatório.")
+
+        num_sei = str(dados.get("numero_sei") or "").strip()
+        tipo = str(dados.get("tipo_documento") or "Documento").strip()
+        dt_doc = str(dados.get("data_documento") or "").strip()
+        unidade = str(dados.get("unidade_geradora") or "STI").strip()
+        link = str(dados.get("link_visualizacao") or "").strip()
+
+        cursor.execute("""
+            INSERT INTO documentos_processo (processo_id, numero_sei, tipo_documento, nome_exibicao, data_documento, unidade_geradora, link_visualizacao)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (processo_id, num_sei, tipo, nome, dt_doc, unidade, link))
+        conn.commit()
+        return cursor.lastrowid
+
+def excluir_documento_processo(doc_id):
+    """Remove um documento da lista de peças do processo."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM documentos_processo WHERE id = ?", (doc_id,))
+        conn.commit()
+        return cursor.rowcount > 0
