@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gestão e Rastreamento de Processos - STI (v3.0 Homologação)</title>
-  <link rel="stylesheet" href="/css/style.css?v=3.0.1">
+  <link rel="stylesheet" href="/css/style.css?v=3.0.2">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -232,63 +232,70 @@
   <div class="modal-overlay" id="modalProcesso">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 id="modalProcessoTitulo">Cadastrar Novo Processo</h2>
-        <button class="btn-close" onclick="fecharModalProcesso()">&times;</button>
+        <div class="modal-header-text">
+          <h2 id="modalProcessoTitulo">Cadastrar Novo Processo</h2>
+          <span style="font-size: 12px; color: #64748b;">Acompanhamento automatizado SEI e StartGov</span>
+        </div>
+        <button type="button" class="btn-close" onclick="fecharModalProcesso()" aria-label="Fechar">&times;</button>
       </div>
-      <form id="formProcesso" onsubmit="salvarProcesso(event)">
-        <input type="hidden" id="formProcId">
-        <div class="form-row">
-          <div class="form-group col-6">
-            <label for="formProjeto">Nome do Projeto *</label>
-            <input type="text" id="formProjeto" list="listaProjetosDatalist" required placeholder="Digite ou selecione o projeto...">
-            <datalist id="listaProjetosDatalist"></datalist>
+      <form id="formProcesso" onsubmit="salvarProcesso(event)" style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
+        <div class="modal-body">
+          <input type="hidden" id="formProcId">
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="formProjeto">Nome do Projeto *</label>
+              <input type="text" id="formProjeto" list="listaProjetosDatalist" required placeholder="Digite ou selecione o projeto...">
+              <datalist id="listaProjetosDatalist"></datalist>
+            </div>
+            <div class="form-group col-6">
+              <label for="formSistema">Sistema Oficial *</label>
+              <select id="formSistema" required>
+                <option value="SEI">SEI (Sistema Eletrônico de Informações)</option>
+                <option value="STARTGOV">STARTGOV (Compras e Licitações)</option>
+              </select>
+            </div>
           </div>
-          <div class="form-group col-6">
-            <label for="formSistema">Sistema Oficial *</label>
-            <select id="formSistema" required>
-              <option value="SEI">SEI (Sistema Eletrônico de Informações)</option>
-              <option value="STARTGOV">STARTGOV (Compras e Licitações)</option>
-            </select>
-          </div>
-        </div>
 
-        <div class="form-group">
-          <label for="formDescricao">Descrição / Objeto do Projeto</label>
-          <textarea id="formDescricao" rows="2" placeholder="Descreva o objetivo geral do projeto..."></textarea>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group col-6">
-            <label for="formNumero">Nº do Processo *</label>
-            <input type="text" id="formNumero" required placeholder="Ex: 202.522.010.200.056 ou SEDUC/00469/2026">
+          <div class="form-group">
+            <label for="formDescricao">Descrição / Objeto do Projeto</label>
+            <textarea id="formDescricao" rows="2" placeholder="Descreva o objetivo geral do projeto..."></textarea>
           </div>
-          <div class="form-group col-6">
-            <label for="formLocal">Local / Setor Atual</label>
-            <input type="text" id="formLocal" placeholder="Ex: STI/SEDUC, SAOFC/SEDUC">
-          </div>
-        </div>
 
-        <div class="form-row">
-          <div class="form-group col-6">
-            <label for="formDataRec">Data de Recebimento</label>
-            <input type="date" id="formDataRec">
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="formNumero">Nº do Processo *</label>
+              <input type="text" id="formNumero" required placeholder="Ex: 202.522.010.200.056 ou SEDUC/00469/2026">
+            </div>
+            <div class="form-group col-6">
+              <label for="formLocal">Local / Setor Atual</label>
+              <input type="text" id="formLocal" placeholder="Ex: STI/SEDUC, SAOFC/SEDUC">
+            </div>
           </div>
-          <div class="form-group col-6">
-            <label for="formSituacao">Situação</label>
-            <input type="text" id="formSituacao" placeholder="Ex: Em Análise, Concluído">
+
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="formDataRec">Data de Recebimento</label>
+              <input type="date" id="formDataRec">
+            </div>
+            <div class="form-group col-6">
+              <label for="formSituacao">Situação</label>
+              <input type="text" id="formSituacao" placeholder="Ex: Em Análise, Concluído">
+            </div>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label for="formAcao">Ação / Providência Imediata</label>
-          <input type="text" id="formAcao" placeholder="Ex: Aguardando emissão de empenho">
-        </div>
+          <div class="form-group">
+            <label for="formAcao">Ação / Providência Imediata</label>
+            <input type="text" id="formAcao" placeholder="Ex: Aguardando emissão de empenho">
+          </div>
 
-        <div class="form-group">
-          <label>
-            <input type="checkbox" id="formMonitorar" checked>
-            Monitorar automaticamente via Robô (SEI / STARTGOV)
-          </label>
+          <div class="form-group">
+            <div class="checkbox-group">
+              <input type="checkbox" id="formMonitorar" checked>
+              <label for="formMonitorar">
+                Monitorar automaticamente via Robô (SEI / STARTGOV)
+              </label>
+            </div>
+          </div>
         </div>
 
         <div class="modal-footer">
@@ -434,7 +441,7 @@
   </div>
 
   <!-- SCRIPTS DA APLICAÇÃO -->
-  <script src="/js/app.js?v=3.0.1"></script>
+  <script src="/js/app.js?v=3.0.2"></script>
 
   <!-- ATALHO DE TECLADO CTRL+K / CMD+K -->
   <script>

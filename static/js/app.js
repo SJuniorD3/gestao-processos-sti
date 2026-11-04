@@ -559,7 +559,7 @@ function fecharModalHistorico() {
 // -------------------------------------------------------------
 function abrirModalNovoProcesso() {
   const tituloEl = document.getElementById("modalProcessoTitulo");
-  if (tituloEl) tituloEl.textContent = "Cadastrar Novo Processo para Monitoramento";
+  if (tituloEl) tituloEl.textContent = "Cadastrar Novo Processo";
   document.getElementById("formProcesso").reset();
   document.getElementById("formProcId").value = "";
   const dtEl = document.getElementById("formDataRec");
@@ -577,7 +577,7 @@ async function abrirModalEditarProcesso(procId) {
 
     const p = json.data;
     const tituloEl = document.getElementById("modalProcessoTitulo");
-    if (tituloEl) tituloEl.textContent = "Editar Processo / Atualizar Trâmite";
+    if (tituloEl) tituloEl.textContent = "Editar Processo " + (p.numero_processo || "");
     document.getElementById("formProcId").value = p.id;
     document.getElementById("formProjeto").value = p.projeto || "";
     document.getElementById("formSistema").value = p.sistema || "SEI";
