@@ -438,7 +438,15 @@ def init_db():
                 if "setor_sigla" not in colunas_proj:
                     cursor.execute("ALTER TABLE projetos ADD COLUMN setor_sigla TEXT DEFAULT 'STI'")
             cursor.execute("UPDATE projetos SET etiqueta = 'Contratos' WHERE etiqueta IS NULL OR etiqueta = ''")
-            cursor.execute("UPDATE projetos SET setor_sigla = 'STI' WHERE setor_sigla IS NULL OR setor_sigla = ''")
+            # Vincula todos os projetos cadastrados anteriormente ou sem setor à STI
+            cursor.execute("""
+                UPDATE projetos 
+                SET setor_sigla = 'STI' 
+                WHERE setor_sigla IS NULL 
+                   OR TRIM(setor_sigla) = '' 
+                   OR UPPER(TRIM(setor_sigla)) = 'NONE'
+                   OR UPPER(TRIM(setor_sigla)) = 'NULL'
+            """)
         except Exception as e_mig:
             print(f"[!] Aviso na migração de projetos: {e_mig}")
 
@@ -851,7 +859,10 @@ def obter_ou_criar_projeto(nome, descricao="", etiqueta="Contratos", setor_sigla
             if etiqueta and (not row.get("etiqueta") or (str(etiqueta).strip() and row.get("etiqueta") != etiqueta_limpa and etiqueta != "Contratos")):
                 updates.append("etiqueta = ?")
                 params.append(etiqueta_limpa)
-            if setor_sigla and (not row.get("setor_sigla") or (row.get("setor_sigla") != setor_limpo and setor_sigla != "STI")):
+            if not row.get("setor_sigla") or str(row.get("setor_sigla")).strip() in ("", "None", "null"):
+                updates.append("setor_sigla = ?")
+                params.append(setor_limpo or "STI")
+            elif setor_sigla and setor_sigla != "STI" and row.get("setor_sigla") != setor_limpo:
                 updates.append("setor_sigla = ?")
                 params.append(setor_limpo)
             if updates:
@@ -914,7 +925,7 @@ def listar_projetos_com_processos(apenas_monitorados=False, setor=None):
     with get_connection() as conn:
         cursor = conn.cursor()
         if setor and str(setor).strip():
-            cursor.execute("SELECT * FROM projetos WHERE UPPER(setor_sigla) = ? ORDER BY nome ASC", (str(setor).strip().upper(),))
+            cursor.execute("SELECT * FROM projetos WHERE UPPER(COALESCE(setor_sigla, 'STI')) = ? ORDER BY nome ASC", (str(setor).strip().upper(),))
         else:
             cursor.execute("SELECT * FROM projetos ORDER BY nome ASC")
         projetos_rows = cursor.fetchall()
@@ -1013,7 +1024,7 @@ def listar_processos(apenas_monitorados=False, setor=None):
         if apenas_monitorados:
             where_clauses.append("p.monitorar = 1")
         if setor and str(setor).strip():
-            where_clauses.append("UPPER(proj.setor_sigla) = ?")
+            where_clauses.append("UPPER(COALESCE(proj.setor_sigla, 'STI')) = ?")
             params.append(str(setor).strip().upper())
 
         if where_clauses:
