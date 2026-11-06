@@ -27,18 +27,23 @@ def gerar_conteudo_resumo(tipo="Agendado"):
         todos_processos.extend(p.get("processos", []))
 
     total = len(todos_processos)
-    na_sti = sum(1 for proc in todos_processos if "STI" in proc["local_atual"].upper())
+    na_sti = sum(1 for proc in todos_processos if "STI" in (proc.get("local_atual") or "").upper())
     fora_sti = total - na_sti
-    criticos = sum(1 for proc in todos_processos if (proc["dias_no_setor"] or 0) > 60)
+    criticos = sum(1 for proc in todos_processos if (proc.get("dias_no_setor") or 0) > 60)
+    total_contratos = sum(1 for proj in projetos if (proj.get("etiqueta") or "Contratos") == "Contratos")
+    total_pagamentos = sum(1 for proj in projetos if proj.get("etiqueta") == "Pagamentos")
     
     # ------------------ TEXTO / MARKDOWN AGRUPADO POR PROJETO ------------------
     txt_linhas = []
     txt_linhas.append(f"[STI] RESUMO DE PROCESSOS POR PROJETO ({tipo.upper()})")
     txt_linhas.append(f"Emissao: {data_formatada}")
-    txt_linhas.append(f"Total de Projetos: {total_projetos} | Total de Processos Monitorados: {total}")
-    txt_linhas.append(f"No setor STI: {na_sti} | Em outros setores: {fora_sti} | Em alerta (>60 dias): {criticos}")
+    txt_linhas.append(f"Total de Projetos: {total_projetos} (Contratos: {total_contratos} | Pagamentos: {total_pagamentos})")
+    txt_linhas.append(f"Processos Monitorados: {total} | No setor STI: {na_sti} | Em outros setores: {fora_sti} | Em alerta (>60 dias): {criticos}")
     txt_linhas.append("=" * 64)
     
+    if not projetos:
+        txt_linhas.append("\nNenhum processo monitorado ativo cadastrado no sistema.")
+
     for idx_proj, proj in enumerate(projetos, 1):
         procs = proj.get("processos", [])
         etq_proj = proj.get("etiqueta") or "Contratos"
@@ -48,11 +53,13 @@ def gerar_conteudo_resumo(tipo="Agendado"):
         txt_linhas.append("-" * 50)
 
         for j, p in enumerate(procs, 1):
-            dias = f"{p['dias_no_setor']} dias" if p['dias_no_setor'] is not None else "-"
-            txt_linhas.append(f"  ({j}) Sistema: {p['sistema']} | Nº: {p['numero_processo']}")
-            txt_linhas.append(f"      Local Atual: {p['local_atual']} (Tempo no Setor: {dias})")
-            txt_linhas.append(f"      Ação: {p['acao']}")
-            txt_linhas.append(f"      Situação: {p['situacao']}")
+            dias = f"{p['dias_no_setor']} dias" if p.get('dias_no_setor') is not None else "-"
+            tot_docs = p.get('total_documentos', 0)
+            docs_txt = f" | Peças SEI: {tot_docs}" if tot_docs > 0 else ""
+            txt_linhas.append(f"  ({j}) Sistema: {p.get('sistema', 'SEI')} | Nº: {p.get('numero_processo', '-')}{docs_txt}")
+            txt_linhas.append(f"      Local Atual: {p.get('local_atual') or '-'} (Tempo no Setor: {dias})")
+            txt_linhas.append(f"      Ação: {p.get('acao') or '-'}")
+            txt_linhas.append(f"      Situação: {p.get('situacao') or '-'}")
             
             status_list = p.get("ultimos_4_status", [])
             if status_list:
@@ -75,10 +82,14 @@ def gerar_conteudo_resumo(tipo="Agendado"):
 
         linhas_proc = ""
         for i, p in enumerate(procs):
-            dias = f"{p['dias_no_setor']} dias" if p['dias_no_setor'] is not None else "-"
-            badge_dias_cor = "#ef4444" if (p['dias_no_setor'] or 0) > 60 else ("#f59e0b" if (p['dias_no_setor'] or 0) > 30 else "#10b981")
-            badge_sistema_cor = "#facc15" if p['sistema'].upper() == "SEI" else "#3b82f6"
-            badge_sistema_text = "#854d0e" if p['sistema'].upper() == "SEI" else "#ffffff"
+            dias = f"{p['dias_no_setor']} dias" if p.get('dias_no_setor') is not None else "-"
+            badge_dias_cor = "#ef4444" if (p.get('dias_no_setor') or 0) > 60 else ("#f59e0b" if (p.get('dias_no_setor') or 0) > 30 else "#10b981")
+            sis = str(p.get('sistema') or "SEI").upper()
+            badge_sistema_cor = "#facc15" if sis == "SEI" else "#3b82f6"
+            badge_sistema_text = "#854d0e" if sis == "SEI" else "#ffffff"
+
+            tot_docs = p.get('total_documentos', 0)
+            badge_docs = f'<br><span style="display:inline-block; font-size:10px; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; padding:1px 5px; border-radius:4px; font-weight:bold; margin-top:3px;">📎 {tot_docs} peças</span>' if tot_docs > 0 else ''
 
             status_items = ""
             for idx_s, s in enumerate(p.get("ultimos_4_status", []), 1):
@@ -119,21 +130,22 @@ def gerar_conteudo_resumo(tipo="Agendado"):
             <tr style="border-bottom: 1px solid #e2e8f0;">
                 {coluna_projeto}
                 <td style="padding: 10px; vertical-align: top; text-align: center;">
-                    <span style="background: {badge_sistema_cor}; color: {badge_sistema_text}; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;">{p['sistema']}</span>
+                    <span style="background: {badge_sistema_cor}; color: {badge_sistema_text}; padding: 3px 8px; border-radius: 4px; font-weight: bold; font-size: 11px;">{p.get('sistema', 'SEI')}</span>
                 </td>
                 <td style="padding: 10px; vertical-align: top; font-family: monospace; font-size: 12px; font-weight: bold; color: #2563eb;">
-                    {p['numero_processo']}
+                    {p.get('numero_processo', '-')}
+                    {badge_docs}
                 </td>
                 {coluna_desc}
                 <td style="padding: 10px; vertical-align: top;">
-                    <span style="background: #e0e7ff; color: #3730a3; padding: 3px 7px; border-radius: 4px; font-weight: bold; font-size: 11px;">{p['local_atual']}</span>
+                    <span style="background: #e0e7ff; color: #3730a3; padding: 3px 7px; border-radius: 4px; font-weight: bold; font-size: 11px;">{p.get('local_atual') or '-'}</span>
                 </td>
                 <td style="padding: 10px; vertical-align: top; text-align: center;">
                     <span style="background: {badge_dias_cor}; color: white; padding: 3px 7px; border-radius: 10px; font-weight: bold; font-size: 11px;">{dias}</span>
                 </td>
                 <td style="padding: 10px; vertical-align: top; font-size: 12px; color: #1f2937;">
-                    <strong>Ação:</strong> {p['acao']}<br>
-                    <strong>Situação:</strong> {p['situacao']}
+                    <strong>Ação:</strong> {p.get('acao') or '-'}<br>
+                    <strong>Situação:</strong> {p.get('situacao') or '-'}
                 </td>
                 <td style="padding: 10px; vertical-align: top; background: #fafafa;">
                     <ol style="margin: 0; padding-left: 16px;">
@@ -144,6 +156,15 @@ def gerar_conteudo_resumo(tipo="Agendado"):
             """
 
         html_projetos += linhas_proc
+
+    if not html_projetos.strip():
+        html_projetos = """
+        <tr>
+            <td colspan="8" style="padding: 32px 20px; text-align: center; color: #64748b; font-size: 13px;">
+                Nenhum processo monitorado ativo cadastrado no sistema.
+            </td>
+        </tr>
+        """
 
     html_resumo = f"""
     <!DOCTYPE html>
@@ -159,25 +180,29 @@ def gerar_conteudo_resumo(tipo="Agendado"):
                 <p style="margin: 4px 0 0; opacity: 0.85; font-size: 13px;">Superintendência de Tecnologia da Informação • Emissão: <strong>{data_formatada}</strong> ({tipo})</p>
             </div>
             
-            <div style="display: flex; gap: 12px; padding: 14px 24px; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
-                <div style="flex: 1; background: white; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; text-align: center;">
-                    <span style="font-size: 11px; color: #64748b; text-transform: uppercase;">Total de Projetos</span>
+            <div style="display: flex; gap: 10px; padding: 14px 24px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 110px; background: white; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; text-align: center;">
+                    <span style="font-size: 11px; color: #64748b; text-transform: uppercase;">Total Projetos</span>
                     <h3 style="margin: 2px 0 0; font-size: 18px; color: #0f172a;">{total_projetos}</h3>
                 </div>
-                <div style="flex: 1; background: white; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; text-align: center;">
-                    <span style="font-size: 11px; color: #64748b; text-transform: uppercase;">Processos Monitorados</span>
+                <div style="flex: 1; min-width: 110px; background: white; padding: 10px; border-radius: 6px; border: 1px solid #bfdbfe; text-align: center;">
+                    <span style="font-size: 11px; color: #1d4ed8; text-transform: uppercase; font-weight: bold;">📄 Contratos</span>
+                    <h3 style="margin: 2px 0 0; font-size: 18px; color: #1d4ed8;">{total_contratos}</h3>
+                </div>
+                <div style="flex: 1; min-width: 110px; background: white; padding: 10px; border-radius: 6px; border: 1px solid #a7f3d0; text-align: center;">
+                    <span style="font-size: 11px; color: #047857; text-transform: uppercase; font-weight: bold;">💳 Pagamentos</span>
+                    <h3 style="margin: 2px 0 0; font-size: 18px; color: #047857;">{total_pagamentos}</h3>
+                </div>
+                <div style="flex: 1; min-width: 110px; background: white; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; text-align: center;">
+                    <span style="font-size: 11px; color: #64748b; text-transform: uppercase;">Monitorados</span>
                     <h3 style="margin: 2px 0 0; font-size: 18px; color: #2563eb;">{total}</h3>
                 </div>
-                <div style="flex: 1; background: white; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; text-align: center;">
+                <div style="flex: 1; min-width: 110px; background: white; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; text-align: center;">
                     <span style="font-size: 11px; color: #64748b; text-transform: uppercase;">No Setor STI</span>
                     <h3 style="margin: 2px 0 0; font-size: 18px; color: #059669;">{na_sti}</h3>
                 </div>
-                <div style="flex: 1; background: white; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; text-align: center;">
-                    <span style="font-size: 11px; color: #64748b; text-transform: uppercase;">Fora da STI</span>
-                    <h3 style="margin: 2px 0 0; font-size: 18px; color: #64748b;">{fora_sti}</h3>
-                </div>
-                <div style="flex: 1; background: white; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; text-align: center;">
-                    <span style="font-size: 11px; color: #64748b; text-transform: uppercase;">Alerta (>60 dias)</span>
+                <div style="flex: 1; min-width: 110px; background: white; padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; text-align: center;">
+                    <span style="font-size: 11px; color: #64748b; text-transform: uppercase;">Alerta (>60d)</span>
                     <h3 style="margin: 2px 0 0; font-size: 18px; color: #ef4444;">{criticos}</h3>
                 </div>
             </div>
@@ -313,6 +338,8 @@ def gerar_relatorio_executivo_formal_html(usuario="STI"):
     criticos = sum(1 for proc in todos_processos if (proc.get("dias_no_setor") or 0) > 60)
     alerta_medio = sum(1 for proc in todos_processos if 15 < (proc.get("dias_no_setor") or 0) <= 60)
     no_prazo = sum(1 for proc in todos_processos if (proc.get("dias_no_setor") or 0) <= 15)
+    total_contratos = sum(1 for proj in projetos if (proj.get("etiqueta") or "Contratos") == "Contratos")
+    total_pagamentos = sum(1 for proj in projetos if proj.get("etiqueta") == "Pagamentos")
 
     linhas_html = []
     for idx_proj, proj in enumerate(projetos, 1):
@@ -351,6 +378,9 @@ def gerar_relatorio_executivo_formal_html(usuario="STI"):
             cor_badge = "#16a34a" if (dias or 0) <= 15 else ("#ca8a04" if (dias or 0) <= 60 else "#dc2626")
             bg_badge = "#dcfce7" if (dias or 0) <= 15 else ("#fef9c3" if (dias or 0) <= 60 else "#fee2e2")
 
+            tot_docs = p.get('total_documentos', 0)
+            badge_docs = f'<br><span style="display:inline-block; font-size:9px; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; padding:1px 5px; border-radius:4px; font-weight:700; margin-top:2px;">📎 {tot_docs} peças</span>' if tot_docs > 0 else ''
+
             ult_status = p.get("ultimos_4_status", [])
             ult_texto = "-"
             if ult_status:
@@ -365,6 +395,7 @@ def gerar_relatorio_executivo_formal_html(usuario="STI"):
                 <td>
                   <span class="badge-sis badge-{p.get('sistema', 'sei').lower()}">{p.get('sistema')}</span><br>
                   <strong style="font-family: monospace; font-size: 11px;">{p.get('numero_processo')}</strong>
+                  {badge_docs}
                 </td>
                 <td><strong>{p.get('local_atual') or '-'}</strong></td>
                 <td>{formatar_data_br(p.get('data_recebimento'))}</td>
@@ -384,6 +415,13 @@ def gerar_relatorio_executivo_formal_html(usuario="STI"):
         """)
 
     conteudo_tabelas = "".join(linhas_html)
+    if not conteudo_tabelas.strip():
+        conteudo_tabelas = """
+        <div style="text-align: center; padding: 40px 20px; color: #64748b; background: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1; margin-bottom: 24px;">
+            <p style="font-size: 14px; font-weight: 700; color: #1e293b;">Nenhum processo monitorado ativo cadastrado no momento.</p>
+            <p style="font-size: 12px; margin-top: 4px;">Cadastre novos processos ou ative a opção de monitoramento para consolidar os dados neste relatório.</p>
+        </div>
+        """
 
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -642,18 +680,22 @@ def gerar_relatorio_executivo_formal_html(usuario="STI"):
       </div>
     </div>
 
-    <div class="kpi-resumo-grid">
+    <div class="kpi-resumo-grid" style="grid-template-columns: repeat(6, 1fr);">
       <div class="kpi-card">
         <div class="valor">{total}</div>
         <div class="rotulo">Total Processos</div>
       </div>
       <div class="kpi-card">
-        <div class="valor" style="color: #2563eb;">{na_sti}</div>
-        <div class="rotulo">No Setor STI</div>
+        <div class="valor" style="color: #1d4ed8;">{total_contratos}</div>
+        <div class="rotulo">📄 Contratos</div>
       </div>
       <div class="kpi-card">
-        <div class="valor" style="color: #475569;">{fora_sti}</div>
-        <div class="rotulo">Em Outros Setores</div>
+        <div class="valor" style="color: #047857;">{total_pagamentos}</div>
+        <div class="rotulo">💳 Pagamentos</div>
+      </div>
+      <div class="kpi-card">
+        <div class="valor" style="color: #2563eb;">{na_sti}</div>
+        <div class="rotulo">No Setor STI</div>
       </div>
       <div class="kpi-card">
         <div class="valor" style="color: #ca8a04;">{alerta_medio}</div>

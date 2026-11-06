@@ -1080,12 +1080,16 @@ def obter_metricas_gargalos():
     
     setores_map = {}
     sistemas_map = {}
+    etiquetas_map = {"Contratos": 0, "Pagamentos": 0}
     lista_com_dias = []
     
     for p in processos:
         dias = p.get("dias_no_setor")
         sis = p.get("sistema") or "SEI"
         sistemas_map[sis] = sistemas_map.get(sis, 0) + 1
+        
+        etq = p.get("etiqueta") or "Contratos"
+        etiquetas_map[etq] = etiquetas_map.get(etq, 0) + 1
         
         setor = (p.get("local_atual") or "Não informado").strip()
         if setor not in setores_map:
@@ -1121,8 +1125,11 @@ def obter_metricas_gargalos():
             "id": p["id"],
             "numero_processo": p["numero_processo"],
             "projeto": p["projeto"],
+            "etiqueta": etq,
+            "sistema": sis,
             "dias_no_setor": dias,
-            "situacao": p.get("situacao", "")
+            "situacao": p.get("situacao", ""),
+            "total_documentos": p.get("total_documentos", 0)
         })
 
     # Calcula médias por setor
@@ -1150,14 +1157,18 @@ def obter_metricas_gargalos():
         "faixas_sla": faixas,
         "por_setor": lista_setores,
         "por_sistema": sistemas_map,
+        "por_etiqueta": etiquetas_map,
         "top_atrasados": [
             {
                 "id": p["id"],
                 "numero_processo": p["numero_processo"],
                 "projeto": p["projeto"],
+                "etiqueta": p.get("etiqueta") or "Contratos",
+                "sistema": p.get("sistema") or "SEI",
                 "local_atual": p["local_atual"],
                 "dias_no_setor": p["dias_no_setor"],
-                "situacao": p["situacao"]
+                "situacao": p.get("situacao", ""),
+                "total_documentos": p.get("total_documentos", 0)
             }
             for p in top_atrasados
         ]

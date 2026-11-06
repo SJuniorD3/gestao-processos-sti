@@ -345,7 +345,7 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
             output.write('\ufeff')
             writer = csv.writer(output, delimiter=';')
             writer.writerow([
-                "ID", "PROJETO", "ETIQUETA", "SISTEMA", "Nº - PROCESSO", "DESCRIÇÃO",
+                "ID", "PROJETO", "ETIQUETA", "SISTEMA", "Nº - PROCESSO", "PEÇAS/ANEXOS", "DESCRIÇÃO",
                 "LOCAL ATUAL", "AÇÃO", "DATA RECEBIMENTO", "SITUAÇÃO", "DIAS NO SETOR", "4 ÚLTIMOS STATUS"
             ])
             for p in processos:
@@ -355,6 +355,7 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                 ])
                 writer.writerow([
                     p["id"], p["projeto"], p.get("etiqueta", "Contratos"), p["sistema"], p["numero_processo"],
+                    p.get("total_documentos", 0),
                     p["descricao"], p["local_atual"], p["acao"],
                     formatar_data_br(p["data_recebimento"]) if p["data_recebimento"] else "-", p["situacao"],
                     p["dias_no_setor"] if p["dias_no_setor"] is not None else "-",

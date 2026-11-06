@@ -2224,10 +2224,27 @@ async function carregarMetricasGargalos() {
       } else {
         let htmlTop = "";
         top.forEach(p => {
+          const etqBadge = p.etiqueta === 'Pagamentos'
+            ? `<span style="font-size: 10px; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 1px 6px; border-radius: 9999px; font-weight: 700;">💳 Pagamentos</span>`
+            : `<span style="font-size: 10px; background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; padding: 1px 6px; border-radius: 9999px; font-weight: 700;">📄 Contratos</span>`;
+
+          const sisBadge = (p.sistema && p.sistema.toUpperCase().includes('STARTGOV'))
+            ? `<span style="font-size: 9.5px; background: #dbeafe; color: #1e40af; padding: 1px 5px; border-radius: 4px; font-weight: 700;">STARTGOV</span>`
+            : `<span style="font-size: 9.5px; background: #fef08a; color: #854d0e; padding: 1px 5px; border-radius: 4px; font-weight: 700;">SEI</span>`;
+
+          const docsBadge = (p.total_documentos && p.total_documentos > 0)
+            ? `<span style="font-size: 10px; color: #64748b; margin-left: 4px;">📎 ${p.total_documentos} peças</span>`
+            : '';
+
           htmlTop += `
             <div class="gargalo-top-item">
               <div style="flex: 1; min-width: 0;">
-                <div style="font-weight: 700; font-family: monospace; font-size: 12px; color: #0f172a;">${escapeHtml(p.numero_processo)}</div>
+                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 3px;">
+                  <span style="font-weight: 700; font-family: monospace; font-size: 12px; color: #0f172a;">${escapeHtml(p.numero_processo)}</span>
+                  ${sisBadge}
+                  ${etqBadge}
+                  ${docsBadge}
+                </div>
                 <div style="font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(p.projeto)} &bull; ${escapeHtml(p.local_atual)}</div>
               </div>
               <div style="text-align: right; margin-left: 10px;">
