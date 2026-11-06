@@ -974,7 +974,7 @@ body {
     min-height: 40px;
   }
   .header-actions .btn-primary {
-    grid-column: span 2; /* "+ Novo Processo" ocupa a linha inteira como CTA principal */
+    grid-column: span 2; /* "📁 Novo Projeto" ocupa a linha inteira como CTA principal */
     font-size: 13.5px;
   }
 
