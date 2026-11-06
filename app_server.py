@@ -24,6 +24,7 @@ from database import (
     listar_processos, listar_projetos_com_processos, obter_processo, criar_processo, atualizar_processo,
     excluir_processo, obter_projeto, obter_ou_criar_projeto, atualizar_projeto, excluir_projeto, listar_ultimos_relatorios,
     formatar_data_br, formatar_data_hora_br,
+    listar_setores, obter_setor, obter_setor_por_sigla, criar_setor, atualizar_setor, excluir_setor,
     obter_usuario_por_login, obter_usuario_por_id, listar_usuarios, criar_usuario, atualizar_usuario, excluir_usuario,
     registrar_auditoria, listar_auditoria, verificar_senha,
     obter_processo_por_numero, obter_metricas_gargalos,
@@ -205,10 +206,18 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json({"success": False, "error": "Acesso não autorizado. Faça login primeiro."}, 401)
                 return
 
+        # Rota da API: Lista de Setores da SEDUC
+        if path == "/api/setores":
+            apenas_ativos = query.get("apenas_ativos", ["0"])[0] in ("1", "true", "True")
+            setores = listar_setores(apenas_ativos=apenas_ativos)
+            self._send_json({"success": True, "data": setores})
+            return
+
         # Rota da API: Lista de Processos
         if path == "/api/processos":
             try:
-                processos = listar_processos()
+                filtro_setor = query.get("setor", [None])[0]
+                processos = listar_processos(setor=filtro_setor)
                 self._send_json({"success": True, "data": processos})
             except Exception as e:
                 self._send_json({"success": False, "error": f"Erro ao listar processos: {str(e)}"}, 500)
@@ -217,8 +226,14 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
         # Rota da API: Projetos Agrupados com seus Processos
         if path == "/api/projetos":
             try:
-                projetos = listar_projetos_com_processos()
-                self._send_json({"success": True, "data": projetos})
+                curr = self._get_current_user()
+                filtro_setor = query.get("setor", [None])[0]
+                # Se não for admin e nenhum filtro for passado explicitamente, filtra pelo setor do usuário logado
+                if curr and curr.get("perfil") != "admin" and not filtro_setor:
+                    u_db = obter_usuario_por_login(curr["usuario"])
+                    filtro_setor = u_db.get("setor_sigla", "STI") if u_db else "STI"
+                projetos = listar_projetos_com_processos(setor=filtro_setor)
+                self._send_json({"success": True, "data": projetos, "setor_filtrado": filtro_setor})
             except Exception as e:
                 self._send_json({"success": False, "error": f"Erro ao listar projetos: {str(e)}"}, 500)
             return
@@ -299,7 +314,17 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                 u_db = obter_usuario_por_login(curr["usuario"])
                 nome = u_db.get("nome", curr["usuario"]) if u_db else curr["usuario"]
                 user_id = u_db.get("id") if u_db else 0
-                self._send_json({"success": True, "data": {"id": user_id, "usuario": curr["usuario"], "nome": nome, "perfil": curr["perfil"]}})
+                setor_sigla = u_db.get("setor_sigla", "STI") if u_db else "STI"
+                self._send_json({
+                    "success": True,
+                    "data": {
+                        "id": user_id,
+                        "usuario": curr["usuario"],
+                        "nome": nome,
+                        "perfil": curr["perfil"],
+                        "setor_sigla": setor_sigla
+                    }
+                })
             else:
                 self._send_json({"success": False, "error": "Não autenticado"}, 401)
             return
@@ -339,13 +364,14 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         # Exportar CSV para Excel
         if path == "/api/export/csv":
-            processos = listar_processos()
+            filtro_setor = query.get("setor", [None])[0]
+            processos = listar_processos(setor=filtro_setor)
             output = io.StringIO()
             # Adiciona BOM para o Excel abrir em UTF-8 corretamente no Windows
             output.write('\ufeff')
             writer = csv.writer(output, delimiter=';')
             writer.writerow([
-                "ID", "PROJETO", "ETIQUETA", "SISTEMA", "Nº - PROCESSO", "PEÇAS/ANEXOS", "DESCRIÇÃO",
+                "ID", "SETOR", "PROJETO", "ETIQUETA", "SISTEMA", "Nº - PROCESSO", "PEÇAS/ANEXOS", "DESCRIÇÃO",
                 "LOCAL ATUAL", "AÇÃO", "DATA RECEBIMENTO", "SITUAÇÃO", "DIAS NO SETOR", "4 ÚLTIMOS STATUS"
             ])
             for p in processos:
@@ -354,7 +380,7 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                     for s in p.get("ultimos_4_status", [])
                 ])
                 writer.writerow([
-                    p["id"], p["projeto"], p.get("etiqueta", "Contratos"), p["sistema"], p["numero_processo"],
+                    p["id"], p.get("setor_sigla", "STI"), p["projeto"], p.get("etiqueta", "Contratos"), p["sistema"], p["numero_processo"],
                     p.get("total_documentos", 0),
                     p["descricao"], p["local_atual"], p["acao"],
                     formatar_data_br(p["data_recebimento"]) if p["data_recebimento"] else "-", p["situacao"],
@@ -454,6 +480,27 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json({"success": False, "error": "Acesso não autorizado. Faça login primeiro."}, 401)
             return
 
+        # Cadastrar Novo Setor da SEDUC (Admin)
+        if path == "/api/setores":
+            curr = self._require_role("admin")
+            if not curr:
+                return
+            dados = self._read_json()
+            sigla = str(dados.get("sigla", "")).strip().upper()
+            nome = str(dados.get("nome", "")).strip()
+
+            if not sigla or not nome:
+                self._send_json({"success": False, "error": "Sigla e Nome do setor são obrigatórios."}, 400)
+                return
+
+            try:
+                novo_id = criar_setor(sigla, nome)
+                registrar_auditoria(curr["usuario"], "CRIAR_SETOR", f"Cadastrou setor '{sigla}' ({nome})", self._get_client_ip())
+                self._send_json({"success": True, "id": novo_id, "message": f"Setor '{sigla}' cadastrado com sucesso!"}, 201)
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 400)
+            return
+
         # Cadastrar Novo Usuário (Admin)
         if path == "/api/usuarios":
             curr = self._require_role("admin")
@@ -464,6 +511,7 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
             usuario = str(dados.get("usuario", "")).strip().lower()
             senha = str(dados.get("senha", "")).strip()
             perfil = str(dados.get("perfil", "operador")).strip().lower()
+            setor_sigla = str(dados.get("setor_sigla", "STI")).strip().upper() or "STI"
 
             if not nome or not usuario or not senha:
                 self._send_json({"success": False, "error": "Nome, login e senha são obrigatórios."}, 400)
@@ -475,8 +523,8 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                 return
 
             try:
-                novo_id = criar_usuario(nome, usuario, senha, perfil)
-                registrar_auditoria(curr["usuario"], "CRIAR_USUARIO", f"Cadastrou usuário '{usuario}' ({perfil})", self._get_client_ip())
+                novo_id = criar_usuario(nome, usuario, senha, perfil, setor_sigla=setor_sigla)
+                registrar_auditoria(curr["usuario"], "CRIAR_USUARIO", f"Cadastrou usuário '{usuario}' ({perfil} - Setor: {setor_sigla})", self._get_client_ip())
                 self._send_json({"success": True, "id": novo_id, "message": f"Usuário '{usuario}' cadastrado com sucesso!"}, 201)
             except Exception as e:
                 self._send_json({"success": False, "error": str(e)}, 400)
@@ -491,12 +539,18 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
             nome = str(dados.get("nome", "")).strip()
             desc = str(dados.get("descricao", "")).strip()
             etiqueta = str(dados.get("etiqueta", "Contratos")).strip()
+            setor_sigla = str(dados.get("setor_sigla", "")).strip().upper()
+
+            if not setor_sigla:
+                u_db = obter_usuario_por_login(curr["usuario"])
+                setor_sigla = u_db.get("setor_sigla", "STI") if u_db else "STI"
+
             if not nome:
                 self._send_json({"success": False, "error": "O nome do projeto é obrigatório."}, 400)
                 return
             try:
-                proj_id = obter_ou_criar_projeto(nome, desc, etiqueta=etiqueta)
-                registrar_auditoria(curr["usuario"], "CRIAR_PROJETO", f"Cadastrou projeto '{nome}' (ID {proj_id}) com etiqueta '{etiqueta}'", self._get_client_ip())
+                proj_id = obter_ou_criar_projeto(nome, desc, etiqueta=etiqueta, setor_sigla=setor_sigla)
+                registrar_auditoria(curr["usuario"], "CRIAR_PROJETO", f"Cadastrou projeto '{nome}' (ID {proj_id}) com etiqueta '{etiqueta}' e setor '{setor_sigla}'", self._get_client_ip())
                 self._send_json({"success": True, "id": proj_id, "message": "Projeto cadastrado com sucesso!"}, 201)
             except Exception as e:
                 self._send_json({"success": False, "error": f"Erro ao cadastrar projeto: {str(e)}"}, 400)
@@ -511,6 +565,9 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
             if not dados.get("numero_processo"):
                 self._send_json({"success": False, "error": "O Número do Processo é obrigatório para cadastro."}, 400)
                 return
+            if not dados.get("setor_sigla") and not dados.get("setor"):
+                u_db = obter_usuario_por_login(curr["usuario"])
+                dados["setor_sigla"] = u_db.get("setor_sigla", "STI") if u_db else "STI"
             try:
                 novo_id = criar_processo(dados)
                 registrar_auditoria(curr["usuario"], "CRIAR_PROCESSO", f"Cadastrou processo '{dados.get('numero_processo')}' no sistema '{dados.get('sistema')}'", self._get_client_ip())
@@ -545,10 +602,11 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
 
                         i_proj = idx(["projeto", "nome do projeto", "proj"], 0)
                         i_etiqueta = idx(["etiqueta", "tag", "categoria", "tipo projeto"], -1)
+                        i_setor = idx(["setor", "setor_sigla", "sigla_setor", "unidade_setor"], -1)
                         i_sis = idx(["sistema", "tipo", "origem"], 1)
                         i_num = idx(["numero_processo", "processo", "nº processo", "nº - processo", "numero", "nº"], 2)
                         i_desc = idx(["descricao", "descrição", "objeto", "objeto/descrição"], 3)
-                        i_local = idx(["local_atual", "local", "setor", "unidade"], 4)
+                        i_local = idx(["local_atual", "local", "unidade"], 4)
                         i_acao = idx(["acao", "ação"], 5)
                         i_data = idx(["data_recebimento", "data", "recebimento", "dt_recebimento"], 6)
                         i_sit = idx(["situacao", "situação", "status"], 7)
@@ -566,6 +624,7 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                             registros.append({
                                 "projeto": col(i_proj, "STI"),
                                 "etiqueta": col(i_etiqueta, "Contratos"),
+                                "setor_sigla": col(i_setor, "STI"),
                                 "sistema": col(i_sis, "SEI"),
                                 "numero_processo": num_proc,
                                 "descricao": col(i_desc, ""),
@@ -753,6 +812,27 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
 
+        # Atualizar Setor da SEDUC (Admin)
+        if path.startswith("/api/setores/"):
+            curr = self._require_role("admin")
+            if not curr:
+                return
+            try:
+                setor_id = int(path.split("/")[-1])
+                dados = self._read_json()
+                sigla = str(dados.get("sigla", "")).strip().upper()
+                nome = str(dados.get("nome", "")).strip()
+                ativo = dados.get("ativo", 1)
+                sucesso = atualizar_setor(setor_id, sigla, nome, ativo)
+                if sucesso:
+                    registrar_auditoria(curr["usuario"], "EDITAR_SETOR", f"Atualizou setor ID {setor_id} ({sigla} - {nome}, Ativo: {ativo})", self._get_client_ip())
+                    self._send_json({"success": True, "message": "Setor atualizado com sucesso!"})
+                else:
+                    self._send_json({"success": False, "error": "Setor não encontrado para atualização"}, 404)
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 400)
+            return
+
         # Atualizar Usuário (Admin)
         if path.startswith("/api/usuarios/"):
             curr = self._require_role("admin")
@@ -765,8 +845,9 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                 perfil = dados.get("perfil", "operador")
                 ativo = dados.get("ativo", 1)
                 senha = dados.get("senha")
-                atualizar_usuario(user_id, nome, perfil, ativo, senha)
-                registrar_auditoria(curr["usuario"], "EDITAR_USUARIO", f"Atualizou usuário ID {user_id} (Perfil: {perfil}, Ativo: {ativo})", self._get_client_ip())
+                setor_sigla = dados.get("setor_sigla")
+                atualizar_usuario(user_id, nome, perfil, ativo, senha, setor_sigla=setor_sigla)
+                registrar_auditoria(curr["usuario"], "EDITAR_USUARIO", f"Atualizou usuário ID {user_id} (Perfil: {perfil}, Setor: {setor_sigla}, Ativo: {ativo})", self._get_client_ip())
                 self._send_json({"success": True, "message": "Usuário atualizado com sucesso!"})
             except Exception as e:
                 self._send_json({"success": False, "error": str(e)}, 400)
@@ -783,9 +864,10 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                 nome = dados.get("nome", "")
                 descricao = dados.get("descricao", "")
                 etiqueta = dados.get("etiqueta", "Contratos")
-                sucesso = atualizar_projeto(proj_id, nome, descricao, etiqueta)
+                setor_sigla = dados.get("setor_sigla", "STI")
+                sucesso = atualizar_projeto(proj_id, nome, descricao, etiqueta, setor_sigla=setor_sigla)
                 if sucesso:
-                    registrar_auditoria(curr["usuario"], "EDITAR_PROJETO", f"Atualizou projeto ID {proj_id} ({nome}) - Etiqueta: {etiqueta}", self._get_client_ip())
+                    registrar_auditoria(curr["usuario"], "EDITAR_PROJETO", f"Atualizou projeto ID {proj_id} ({nome}) - Etiqueta: {etiqueta}, Setor: {setor_sigla}", self._get_client_ip())
                     self._send_json({"success": True, "message": "Projeto atualizado com sucesso!"})
                 else:
                     self._send_json({"success": False, "error": "Projeto não encontrado para atualização"}, 404)
@@ -820,6 +902,24 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+
+        # Excluir / Desativar Setor da SEDUC (Admin apenas)
+        if path.startswith("/api/setores/"):
+            curr = self._require_role("admin")
+            if not curr:
+                return
+            try:
+                s_id = int(path.split("/")[-1])
+                setor_alvo = obter_setor(s_id)
+                if not setor_alvo:
+                    self._send_json({"success": False, "error": "Setor não encontrado."}, 404)
+                    return
+                excluir_setor(s_id)
+                registrar_auditoria(curr["usuario"], "EXCLUIR_SETOR", f"Removeu ou inativou setor '{setor_alvo['sigla']}' (ID {s_id})", self._get_client_ip())
+                self._send_json({"success": True, "message": f"Setor '{setor_alvo['sigla']}' processado com sucesso!"})
+            except Exception as e:
+                self._send_json({"success": False, "error": str(e)}, 400)
+            return
 
         # Excluir Usuário (Admin apenas)
         if path.startswith("/api/usuarios/"):

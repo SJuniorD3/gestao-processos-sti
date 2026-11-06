@@ -165,7 +165,10 @@ function exibirSkeletons() {
   }
 }
 
+let setoresCache = [];
+
 document.addEventListener("DOMContentLoaded", () => {
+  carregarSetores();
   carregarUsuarioAtual();
   carregarDados();
   atualizarStatusAgendador();
@@ -181,6 +184,7 @@ async function carregarUsuarioAtual() {
       usuarioLogado = json.data;
       const lbl = document.getElementById("labelNomeUsuario");
       const badge = document.getElementById("badgePerfilUsuario");
+      const badgeSetor = document.getElementById("badgeSetorUsuario");
       const btnAdmin = document.getElementById("btnAdminUsuarios");
 
       if (lbl) lbl.textContent = usuarioLogado.nome || usuarioLogado.usuario;
@@ -198,6 +202,12 @@ async function carregarUsuarioAtual() {
           badge.style.background = "#f1f5f9";
           badge.style.color = "#475569";
         }
+      }
+
+      if (badgeSetor) {
+        const sSigla = usuarioLogado.setor_sigla || "STI";
+        badgeSetor.textContent = sSigla;
+        badgeSetor.title = `Setor SEDUC do Usuário: ${sSigla}`;
       }
 
       if (btnAdmin) {
@@ -285,7 +295,7 @@ function popularSelectProjetos(projetos) {
   const select = document.getElementById("editProjSelect");
   if (select) {
     select.innerHTML = '<option value="">-- Selecione um projeto para editar --</option>' +
-      projetos.map(p => `<option value="${p.id}">[${p.etiqueta === 'Pagamentos' ? '💳 Pagamentos' : '📄 Contratos'}] ${escapeHtml(p.nome)} (${(p.processos || []).length} processos)</option>`).join("");
+      projetos.map(p => `<option value="${p.id}">[${escapeHtml(p.setor_sigla || 'STI')} | ${p.etiqueta === 'Pagamentos' ? '💳 Pagamentos' : '📄 Contratos'}] ${escapeHtml(p.nome)} (${(p.processos || []).length} processos)</option>`).join("");
   }
 }
 
@@ -339,11 +349,15 @@ function renderizarTabela(listaProjetos) {
       const badgeVazia = etqVazia === "Pagamentos"
         ? `<span class="badge-etiqueta badge-pagamentos">💳 Pagamentos</span>`
         : `<span class="badge-etiqueta badge-contratos">📄 Contratos</span>`;
+      const badgeSetorVazia = `<span class="badge-setor">🏢 ${escapeHtml(proj.setor_sigla || 'STI')}</span>`;
 
       htmlTotal += `
         <tr>
           <td class="cell-projeto" style="font-weight: 800; color: #1e3a8a;">
-            ${badgeVazia}
+            <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 5px;">
+              ${badgeSetorVazia}
+              ${badgeVazia}
+            </div>
             <div>📁 ${escapeHtml(proj.nome)}</div>
             <span style="display: block; font-size: 11px; color: #64748b;">(Sem processos)</span>
           </td>
@@ -376,10 +390,14 @@ function renderizarTabela(listaProjetos) {
         const badgeEtq = etq === "Pagamentos"
           ? `<span class="badge-etiqueta badge-pagamentos">💳 Pagamentos</span>`
           : `<span class="badge-etiqueta badge-contratos">📄 Contratos</span>`;
+        const badgeSetor = `<span class="badge-setor">🏢 ${escapeHtml(proj.setor_sigla || 'STI')}</span>`;
 
         celulaProjeto = `
           <td rowspan="${totalP}" class="cell-projeto" style="vertical-align: top; background: white; font-weight: 700; color: #111827;">
-            ${badgeEtq}
+            <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 5px;">
+              ${badgeSetor}
+              ${badgeEtq}
+            </div>
             <div style="cursor: pointer;" onclick="${isLeitor ? '' : `abrirModalEditarProjeto(${proj.id})`}" title="${isLeitor ? '' : 'Clique para editar o projeto'}">${escapeHtml(proj.nome)}</div>
             ${!isLeitor ? `
               <div style="margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap;">
@@ -472,6 +490,7 @@ function filtrarTabela() {
   const texto = document.getElementById("filtroTexto").value.toLowerCase().trim();
   const local = document.getElementById("filtroLocal").value;
   const sistema = document.getElementById("filtroSistema").value;
+  const setorFiltro = document.getElementById("filtroSetor") ? document.getElementById("filtroSetor").value.trim().toUpperCase() : "";
   const etiquetaFiltro = document.getElementById("filtroEtiqueta") ? document.getElementById("filtroEtiqueta").value : "";
   const diasFiltro = document.getElementById("filtroDias") ? document.getElementById("filtroDias").value : "";
   const monit = document.getElementById("filtroMonitorar") ? document.getElementById("filtroMonitorar").value : "";
@@ -479,6 +498,12 @@ function filtrarTabela() {
   const filtrados = [];
 
   todosProjetos.forEach(proj => {
+    // Filtro por Setor SEDUC do Projeto
+    const projSetor = (proj.setor_sigla || "STI").trim().toUpperCase();
+    if (setorFiltro && projSetor !== setorFiltro) {
+      return;
+    }
+
     // Filtro por Etiqueta (Contratos / Pagamentos)
     const projEtiqueta = proj.etiqueta || "Contratos";
     if (etiquetaFiltro && projEtiqueta.toLowerCase() !== etiquetaFiltro.toLowerCase()) {
@@ -489,6 +514,7 @@ function filtrarTabela() {
       const matchTexto = !texto || 
         (p.numero_processo && p.numero_processo.toLowerCase().includes(texto)) ||
         (proj.nome && proj.nome.toLowerCase().includes(texto)) ||
+        (proj.setor_sigla && proj.setor_sigla.toLowerCase().includes(texto)) ||
         (proj.descricao && proj.descricao.toLowerCase().includes(texto)) ||
         (p.acao && p.acao.toLowerCase().includes(texto)) ||
         (p.situacao && p.situacao.toLowerCase().includes(texto));
@@ -511,7 +537,7 @@ function filtrarTabela() {
       return matchTexto && matchLocal && matchSistema && matchDias && matchMonit;
     });
 
-    if (procs.length > 0 || (!texto && !local && !sistema && !diasFiltro && !monit)) {
+    if (procs.length > 0 || (!texto && !local && !sistema && !diasFiltro && !monit && !setorFiltro)) {
       filtrados.push({
         ...proj,
         processos: procs
@@ -526,6 +552,7 @@ function filtrarTabela() {
 
 function limparFiltrosV3() {
   if (document.getElementById("filtroTexto")) document.getElementById("filtroTexto").value = "";
+  if (document.getElementById("filtroSetor")) document.getElementById("filtroSetor").value = "";
   if (document.getElementById("filtroLocal")) document.getElementById("filtroLocal").value = "";
   if (document.getElementById("filtroSistema")) document.getElementById("filtroSistema").value = "";
   if (document.getElementById("filtroEtiqueta")) document.getElementById("filtroEtiqueta").value = "";
@@ -575,6 +602,7 @@ function renderizarTimelineVisual(listaProjetos) {
     const badgeEtqTimeline = etqTimeline === "Pagamentos"
       ? `<span class="badge-etiqueta-timeline badge-pagamentos-timeline">💳 Pagamentos</span>`
       : `<span class="badge-etiqueta-timeline badge-contratos-timeline">📄 Contratos</span>`;
+    const badgeSetorTimeline = `<span class="badge-setor-timeline">🏢 ${escapeHtml(proj.setor_sigla || 'STI')}</span>`;
 
     htmlTotal += `
       <div class="project-card">
@@ -582,6 +610,7 @@ function renderizarTimelineVisual(listaProjetos) {
           <div>
             <div class="project-title" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <span>📁 ${escapeHtml(proj.nome)}</span>
+              ${badgeSetorTimeline}
               ${badgeEtqTimeline}
               <span style="background: rgba(255,255,255,0.15); font-size: 11px; padding: 2px 8px; border-radius: 9999px; font-weight: 500;">
                 ${procs.length} processo(s)
@@ -1201,6 +1230,10 @@ async function sincronizarProcessoWeb(id) {
 function abrirModalNovoProjeto() {
   const form = document.getElementById("formNovoProjeto");
   if (form) form.reset();
+  const setorSel = document.getElementById("novoProjSetor");
+  if (setorSel && usuarioLogado && usuarioLogado.setor_sigla) {
+    setorSel.value = usuarioLogado.setor_sigla;
+  }
   const modal = document.getElementById("modalNovoProjeto");
   if (modal) modal.style.display = "flex";
   setTimeout(() => {
@@ -1221,6 +1254,7 @@ async function salvarNovoProjeto(e) {
   const nome = document.getElementById("novoProjNome").value.trim();
   const descricao = document.getElementById("novoProjDescricao").value.trim();
   const etiqueta = document.getElementById("novoProjEtiqueta") ? document.getElementById("novoProjEtiqueta").value : "Contratos";
+  const setor_sigla = document.getElementById("novoProjSetor") ? document.getElementById("novoProjSetor").value : (usuarioLogado ? usuarioLogado.setor_sigla : "STI");
 
   if (!nome) {
     showToast("O nome do projeto é obrigatório.", "alerta");
@@ -1231,7 +1265,7 @@ async function salvarNovoProjeto(e) {
     const res = await fetch("/api/projetos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome, descricao, etiqueta })
+      body: JSON.stringify({ nome, descricao, etiqueta, setor_sigla })
     });
     const json = await res.json();
     if (json.success) {
@@ -1281,6 +1315,7 @@ function preencherCamposEdicaoProjeto(proj) {
   const nomeEl = document.getElementById("editProjNome");
   const descEl = document.getElementById("editProjDescricao");
   const etqEl = document.getElementById("editProjEtiqueta");
+  const setorEl = document.getElementById("editProjSetor");
   const titleEl = document.getElementById("modalProjetoTitle");
   const infoEl = document.getElementById("editProjProcessosInfo");
   const selEl = document.getElementById("editProjSelect");
@@ -1289,12 +1324,13 @@ function preencherCamposEdicaoProjeto(proj) {
   if (nomeEl) nomeEl.value = proj.nome || "";
   if (descEl) descEl.value = proj.descricao || "";
   if (etqEl) etqEl.value = proj.etiqueta || "Contratos";
+  if (setorEl) setorEl.value = proj.setor_sigla || "STI";
   if (titleEl) titleEl.textContent = `Editar Projeto: ${proj.nome}`;
   if (selEl) selEl.value = proj.id;
 
   const numProcs = (proj.processos || []).length;
   if (infoEl) {
-    infoEl.textContent = `ℹ️ Este projeto possui ${numProcs} processo(s) vinculado(s).`;
+    infoEl.textContent = `ℹ️ Setor: ${proj.setor_sigla || 'STI'} • Possui ${numProcs} processo(s) vinculado(s).`;
   }
 }
 
@@ -1309,6 +1345,7 @@ async function salvarProjetoEdicao(e) {
   const nome = document.getElementById("editProjNome").value.trim();
   const descricao = document.getElementById("editProjDescricao").value.trim();
   const etiqueta = document.getElementById("editProjEtiqueta") ? document.getElementById("editProjEtiqueta").value : "Contratos";
+  const setor_sigla = document.getElementById("editProjSetor") ? document.getElementById("editProjSetor").value : "STI";
 
   if (!projId) {
     showToast("Selecione um projeto para atualizar.", "alerta");
@@ -1323,12 +1360,21 @@ async function salvarProjetoEdicao(e) {
     const res = await fetch(`/api/projetos/${projId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome, descricao, etiqueta })
+      body: JSON.stringify({ nome, descricao, etiqueta, setor_sigla })
     });
     const json = await res.json();
     if (json.success) {
       fecharModalEditarProjeto();
       await carregarDados();
+      showToast(`✓ Projeto "${nome}" atualizado com sucesso!`, "sucesso");
+    } else {
+      showToast("Erro ao salvar projeto: " + json.error, "erro");
+    }
+  } catch (err) {
+    console.error(err);
+    showToast("Erro na requisição ao salvar projeto.", "erro");
+  }
+}
       showToast(`✓ Projeto "${nome}" atualizado com sucesso!`, "sucesso");
     } else {
       showToast("Erro ao salvar projeto: " + json.error, "erro");
@@ -1555,12 +1601,225 @@ async function fazerLogout() {
 }
 
 // -------------------------------------------------------------
+// GESTÃO DE SETORES DA SEDUC
+// -------------------------------------------------------------
+async function carregarSetores() {
+  try {
+    const res = await fetch("/api/setores");
+    const json = await res.json();
+    if (json.success && Array.isArray(json.data)) {
+      setoresCache = json.data;
+      popularSelectSetores(setoresCache);
+      const abaS = document.getElementById("abaConteudoSetores");
+      if (abaS && abaS.style.display !== "none") {
+        renderizarTabelaSetores(setoresCache);
+      }
+    }
+  } catch (err) {
+    console.error("Erro ao carregar setores:", err);
+  }
+}
+
+function popularSelectSetores(lista) {
+  const ativos = lista.filter(s => s.ativo === 1 || s.ativo === "1" || s.ativo === true);
+
+  // 1. Filtro da Toolbar
+  const filtroSel = document.getElementById("filtroSetor");
+  if (filtroSel) {
+    const valAtual = filtroSel.value;
+    filtroSel.innerHTML = '<option value="">🏢 Todos os Setores SEDUC</option>' +
+      ativos.map(s => `<option value="${escapeHtml(s.sigla)}">🏢 ${escapeHtml(s.sigla)} - ${escapeHtml(s.nome)}</option>`).join("");
+    if (valAtual) filtroSel.value = valAtual;
+  }
+
+  // 2. Modal Novo Projeto
+  const novoSel = document.getElementById("novoProjSetor");
+  if (novoSel) {
+    const valAtual = novoSel.value || (usuarioLogado ? usuarioLogado.setor_sigla : "STI");
+    novoSel.innerHTML = ativos.map(s => `<option value="${escapeHtml(s.sigla)}">${escapeHtml(s.sigla)} - ${escapeHtml(s.nome)}</option>`).join("");
+    if (valAtual) novoSel.value = valAtual;
+  }
+
+  // 3. Modal Editar Projeto
+  const editSel = document.getElementById("editProjSetor");
+  if (editSel) {
+    const valAtual = editSel.value;
+    editSel.innerHTML = ativos.map(s => `<option value="${escapeHtml(s.sigla)}">${escapeHtml(s.sigla)} - ${escapeHtml(s.nome)}</option>`).join("");
+    if (valAtual) editSel.value = valAtual;
+  }
+
+  // 4. Form de Usuário
+  const userSel = document.getElementById("formUsuarioSetor");
+  if (userSel) {
+    const valAtual = userSel.value || "STI";
+    userSel.innerHTML = ativos.map(s => `<option value="${escapeHtml(s.sigla)}">${escapeHtml(s.sigla)} - ${escapeHtml(s.nome)}</option>`).join("");
+    if (valAtual) userSel.value = valAtual;
+  }
+}
+
+function renderizarTabelaSetores(lista) {
+  const tbody = document.getElementById("tabelaSetoresCorpo");
+  if (!tbody) return;
+
+  if (!Array.isArray(lista) || lista.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="loading-cell" style="text-align: center; color: #64748b; padding: 20px;">Nenhum setor cadastrado.</td></tr>`;
+    return;
+  }
+
+  let html = "";
+  lista.forEach(s => {
+    const ativoNum = (s.ativo === 1 || s.ativo === "1" || s.ativo === true) ? 1 : 0;
+    const statusBadge = ativoNum === 1
+      ? `<span style="background: #dcfce7; color: #15803d; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">Ativo</span>`
+      : `<span style="background: #fee2e2; color: #b91c1c; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">Inativo</span>`;
+
+    html += `
+      <tr style="border-bottom: 1px solid #f1f5f9;">
+        <td style="padding: 10px 12px; font-weight: 700; font-family: monospace; color: #1e40af;">
+          <span style="background: #eff6ff; padding: 3px 8px; border-radius: 6px; border: 1px solid #bfdbfe;">${escapeHtml(s.sigla)}</span>
+        </td>
+        <td style="padding: 10px 12px; font-weight: 600; color: #0f172a;">${escapeHtml(s.nome)}</td>
+        <td style="padding: 10px 12px;">${statusBadge}</td>
+        <td style="padding: 10px 12px; text-align: center;">
+          <div style="display: flex; gap: 4px; justify-content: center;">
+            <button type="button" class="btn btn-sm btn-outline" style="font-size: 11px; padding: 3px 7px;" onclick="editarSetor(${s.id})">✏️ Editar</button>
+            <button type="button" class="btn btn-sm btn-outline" style="font-size: 11px; padding: 3px 7px; color: ${ativoNum === 1 ? '#d97706' : '#15803d'};" onclick="alternarAtivoSetor(${s.id}, ${ativoNum})">
+              ${ativoNum === 1 ? '⏸ Desativar' : '▶ Ativar'}
+            </button>
+            <button type="button" class="btn btn-sm btn-outline" style="font-size: 11px; padding: 3px 7px; color: #dc2626;" onclick="excluirSetor(${s.id})">🗑️</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  });
+  tbody.innerHTML = html;
+}
+
+function editarSetor(id) {
+  const s = setoresCache.find(x => x.id === id);
+  if (!s) return;
+
+  document.getElementById("formSetorId").value = s.id;
+  document.getElementById("formSetorSigla").value = s.sigla;
+  document.getElementById("formSetorNome").value = s.nome;
+  document.getElementById("formSetorAtivo").value = (s.ativo === 1 || s.ativo === "1" || s.ativo === true) ? "1" : "0";
+
+  document.getElementById("tituloFormSetor").textContent = `✏️ Editando Setor: ${s.sigla}`;
+  document.getElementById("btnSalvarSetor").textContent = "Atualizar Setor";
+  document.getElementById("btnCancelarEdicaoSetor").style.display = "inline-flex";
+}
+
+function cancelarEdicaoSetor() {
+  document.getElementById("formSetor").reset();
+  document.getElementById("formSetorId").value = "";
+  document.getElementById("tituloFormSetor").textContent = "+ Cadastrar Novo Setor SEDUC";
+  document.getElementById("btnSalvarSetor").textContent = "Salvar Setor";
+  document.getElementById("btnCancelarEdicaoSetor").style.display = "none";
+}
+
+async function salvarSetor(e) {
+  e.preventDefault();
+  const id = document.getElementById("formSetorId").value;
+  const sigla = document.getElementById("formSetorSigla").value.trim().toUpperCase();
+  const nome = document.getElementById("formSetorNome").value.trim();
+  const ativo = parseInt(document.getElementById("formSetorAtivo").value, 10);
+
+  if (!sigla || !nome) {
+    showToast("Sigla e Nome do setor são obrigatórios.", "alerta");
+    return;
+  }
+
+  const method = id ? "PUT" : "POST";
+  const url = id ? `/api/setores/${id}` : "/api/setores";
+  const payload = { sigla, nome, ativo };
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast(id ? `✓ Setor "${sigla}" atualizado com sucesso!` : `✓ Setor "${sigla}" cadastrado!`, "sucesso");
+      cancelarEdicaoSetor();
+      await carregarSetores();
+    } else {
+      showToast("Erro: " + json.error, "erro");
+    }
+  } catch (err) {
+    showToast("Falha de conexão ao salvar setor.", "erro");
+  }
+}
+
+async function alternarAtivoSetor(id, statusAtual) {
+  const novoStatus = statusAtual === 1 ? 0 : 1;
+  const acaoTexto = novoStatus === 1 ? "ativar" : "desativar";
+  const s = setoresCache.find(x => x.id === id);
+  if (!s) return;
+
+  mostrarConfirmacao({
+    titulo: `${novoStatus === 1 ? 'Ativar' : 'Desativar'} Setor`,
+    mensagem: `Deseja realmente ${acaoTexto} o setor <strong>${escapeHtml(s.sigla)}</strong> (${escapeHtml(s.nome)})?`,
+    icone: novoStatus === 1 ? "▶" : "⏸",
+    textoConfirmar: `Sim, ${acaoTexto}`,
+    tipo: novoStatus === 1 ? "primary" : "danger",
+    aoConfirmar: async () => {
+      try {
+        const res = await fetch(`/api/setores/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sigla: s.sigla, nome: s.nome, ativo: novoStatus })
+        });
+        const json = await res.json();
+        if (json.success) {
+          showToast(`✓ Setor ${s.sigla} ${acaoTexto === 'ativar' ? 'ativado' : 'desativado'} com sucesso!`, "sucesso");
+          await carregarSetores();
+        } else {
+          showToast("Erro: " + json.error, "erro");
+        }
+      } catch (err) {
+        showToast("Falha ao atualizar status do setor.", "erro");
+      }
+    }
+  });
+}
+
+async function excluirSetor(id) {
+  const s = setoresCache.find(x => x.id === id);
+  if (!s) return;
+
+  mostrarConfirmacao({
+    titulo: "Excluir / Desativar Setor",
+    mensagem: `Tem certeza que deseja excluir o setor <strong>${escapeHtml(s.sigla)}</strong>?<br><small style="color: #64748b;">(Se houver usuários ou projetos vinculados a este setor, ele será automaticamente desativado para preservar os dados históricos).</small>`,
+    icone: "🗑️",
+    textoConfirmar: "Sim, Excluir",
+    tipo: "danger",
+    aoConfirmar: async () => {
+      try {
+        const res = await fetch(`/api/setores/${id}`, { method: "DELETE" });
+        const json = await res.json();
+        if (json.success) {
+          showToast(`✓ Setor "${s.sigla}" processado com sucesso!`, "sucesso");
+          await carregarSetores();
+        } else {
+          showToast("Erro: " + json.error, "erro");
+        }
+      } catch (err) {
+        showToast("Falha ao excluir setor.", "erro");
+      }
+    }
+  });
+}
+
+// -------------------------------------------------------------
 // GESTÃO DE USUÁRIOS E AUDITORIA (MULTI-USUÁRIO & RBAC)
 // -------------------------------------------------------------
 let usuariosCache = [];
 
 async function abrirModalUsuarios() {
   document.getElementById("modalUsuarios").style.display = "flex";
+  await carregarSetores();
   alternarAbaUsuarios("usuarios");
 }
 
@@ -1570,29 +1829,47 @@ function fecharModalUsuarios() {
 
 function alternarAbaUsuarios(aba) {
   const btnU = document.getElementById("tabBtnUsuarios");
+  const btnS = document.getElementById("tabBtnSetores");
   const btnA = document.getElementById("tabBtnAuditoria");
   const abaU = document.getElementById("abaConteudoUsuarios");
+  const abaS = document.getElementById("abaConteudoSetores");
   const abaA = document.getElementById("abaConteudoAuditoria");
 
+  // Reset tabs
+  [btnU, btnS, btnA].forEach(b => {
+    if (b) {
+      b.className = "view-btn";
+      b.style.borderBottom = "none";
+      b.style.fontWeight = "600";
+    }
+  });
+  if (abaU) abaU.style.display = "none";
+  if (abaS) abaS.style.display = "none";
+  if (abaA) abaA.style.display = "none";
+
   if (aba === "usuarios") {
-    btnU.className = "view-btn active";
-    btnU.style.borderBottom = "2px solid #2563eb";
-    btnU.style.fontWeight = "700";
-    btnA.className = "view-btn";
-    btnA.style.borderBottom = "none";
-    btnA.style.fontWeight = "600";
-    abaU.style.display = "block";
-    abaA.style.display = "none";
+    if (btnU) {
+      btnU.className = "view-btn active";
+      btnU.style.borderBottom = "2px solid #2563eb";
+      btnU.style.fontWeight = "700";
+    }
+    if (abaU) abaU.style.display = "block";
     carregarUsuarios();
+  } else if (aba === "setores") {
+    if (btnS) {
+      btnS.className = "view-btn active";
+      btnS.style.borderBottom = "2px solid #2563eb";
+      btnS.style.fontWeight = "700";
+    }
+    if (abaS) abaS.style.display = "block";
+    carregarSetores().then(() => renderizarTabelaSetores(setoresCache));
   } else {
-    btnA.className = "view-btn active";
-    btnA.style.borderBottom = "2px solid #2563eb";
-    btnA.style.fontWeight = "700";
-    btnU.className = "view-btn";
-    btnU.style.borderBottom = "none";
-    btnU.style.fontWeight = "600";
-    abaA.style.display = "block";
-    abaU.style.display = "none";
+    if (btnA) {
+      btnA.className = "view-btn active";
+      btnA.style.borderBottom = "2px solid #2563eb";
+      btnA.style.fontWeight = "700";
+    }
+    if (abaA) abaA.style.display = "block";
     carregarLogsAuditoria();
   }
 }
@@ -1600,7 +1877,7 @@ function alternarAbaUsuarios(aba) {
 async function carregarUsuarios() {
   const tbody = document.getElementById("tabelaUsuariosCorpo");
   if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="5" class="loading-cell">Carregando usuários cadastrados...</td></tr>`;
+  tbody.innerHTML = `<tr><td colspan="6" class="loading-cell">Carregando usuários cadastrados...</td></tr>`;
 
   try {
     const res = await fetch("/api/usuarios");
@@ -1609,11 +1886,11 @@ async function carregarUsuarios() {
       usuariosCache = json.data || [];
       renderizarTabelaUsuarios(usuariosCache);
     } else {
-      tbody.innerHTML = `<tr><td colspan="5" class="loading-cell text-danger" style="text-align: center; color: #dc2626; padding: 18px;">⚠️ ${escapeHtml(json.error || 'Erro ao carregar usuários')}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="loading-cell text-danger" style="text-align: center; color: #dc2626; padding: 18px;">⚠️ ${escapeHtml(json.error || 'Erro ao carregar usuários')}</td></tr>`;
     }
   } catch (err) {
     console.error("Erro ao carregar usuários:", err);
-    tbody.innerHTML = `<tr><td colspan="5" class="loading-cell text-danger" style="text-align: center; color: #dc2626; padding: 18px;">⚠️ Erro de comunicação com o servidor ao listar usuários.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="loading-cell text-danger" style="text-align: center; color: #dc2626; padding: 18px;">⚠️ Erro de comunicação com o servidor ao listar usuários.</td></tr>`;
   }
 }
 
@@ -1622,7 +1899,7 @@ function renderizarTabelaUsuarios(lista) {
   if (!tbody) return;
 
   if (!Array.isArray(lista) || lista.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="loading-cell" style="text-align: center; color: #64748b; padding: 20px;">Nenhum usuário cadastrado.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="loading-cell" style="text-align: center; color: #64748b; padding: 20px;">Nenhum usuário cadastrado.</td></tr>`;
     return;
   }
 
@@ -1640,6 +1917,8 @@ function renderizarTabelaUsuarios(lista) {
       perfilBadge = `<span style="background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">Leitor</span>`;
     }
 
+    const setorBadge = `<span style="background: #e0e7ff; color: #3730a3; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px; font-family: monospace;">${escapeHtml(u.setor_sigla || 'STI')}</span>`;
+
     const ativoNum = (u.ativo === 1 || u.ativo === "1" || u.ativo === true) ? 1 : 0;
     const statusBadge = ativoNum === 1
       ? `<span style="background: #dcfce7; color: #15803d; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 4px;">Ativo</span>`
@@ -1653,6 +1932,7 @@ function renderizarTabelaUsuarios(lista) {
         <td style="padding: 10px 12px; font-weight: 600; color: #0f172a;">${escapeHtml(u.nome || u.usuario || "")}</td>
         <td style="padding: 10px 12px; font-family: monospace; color: #334155;">${escapeHtml(u.usuario || "")}</td>
         <td style="padding: 10px 12px;">${perfilBadge}</td>
+        <td style="padding: 10px 12px;">${setorBadge}</td>
         <td style="padding: 10px 12px;">${statusBadge}</td>
         <td style="padding: 10px 12px; text-align: center;">
           <div style="display: flex; gap: 4px; justify-content: center;">
@@ -1681,6 +1961,8 @@ function editarUsuario(id) {
   document.getElementById("formUsuarioLogin").value = u.usuario;
   document.getElementById("formUsuarioLogin").disabled = true; // Login não deve ser alterado após criação
   document.getElementById("formUsuarioPerfil").value = u.perfil;
+  const setorEl = document.getElementById("formUsuarioSetor");
+  if (setorEl) setorEl.value = u.setor_sigla || "STI";
   document.getElementById("formUsuarioSenha").value = "";
   document.getElementById("formUsuarioSenha").required = false;
   document.getElementById("formUsuarioSenha").placeholder = "Deixe em branco para manter a senha atual";
@@ -1695,6 +1977,8 @@ function cancelarEdicaoUsuario() {
   document.getElementById("formUsuario").reset();
   document.getElementById("formUsuarioId").value = "";
   document.getElementById("formUsuarioLogin").disabled = false;
+  const setorEl = document.getElementById("formUsuarioSetor");
+  if (setorEl) setorEl.value = (usuarioLogado ? usuarioLogado.setor_sigla : "STI");
   document.getElementById("formUsuarioSenha").required = true;
   document.getElementById("formUsuarioSenha").placeholder = "Digite uma senha forte...";
   document.getElementById("lblUsuarioSenha").textContent = "Senha *";
@@ -1709,11 +1993,12 @@ async function salvarUsuario(e) {
   const nome = document.getElementById("formUsuarioNome").value.trim();
   const usuario = document.getElementById("formUsuarioLogin").value.trim().toLowerCase();
   const perfil = document.getElementById("formUsuarioPerfil").value;
+  const setor_sigla = document.getElementById("formUsuarioSetor") ? document.getElementById("formUsuarioSetor").value : "STI";
   const senha = document.getElementById("formUsuarioSenha").value;
 
   const method = id ? "PUT" : "POST";
   const url = id ? `/api/usuarios/${id}` : "/api/usuarios";
-  const payload = { nome, perfil };
+  const payload = { nome, perfil, setor_sigla };
   if (!id) {
     payload.usuario = usuario;
     payload.senha = senha;

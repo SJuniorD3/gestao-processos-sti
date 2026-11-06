@@ -47,7 +47,8 @@ def gerar_conteudo_resumo(tipo="Agendado"):
     for idx_proj, proj in enumerate(projetos, 1):
         procs = proj.get("processos", [])
         etq_proj = proj.get("etiqueta") or "Contratos"
-        txt_linhas.append(f"\n[PROJETO {idx_proj}] {proj['nome'].upper()} [{etq_proj.upper()}] ({len(procs)} processos vinculados)")
+        setor_proj = proj.get("setor_sigla") or "STI"
+        txt_linhas.append(f"\n[PROJETO {idx_proj}] {proj['nome'].upper()} [SETOR: {setor_proj}] [{etq_proj.upper()}] ({len(procs)} processos vinculados)")
         if proj.get("descricao"):
             txt_linhas.append(f"Objeto: {proj['descricao']}")
         txt_linhas.append("-" * 50)
@@ -112,10 +113,14 @@ def gerar_conteudo_resumo(tipo="Agendado"):
                 etq_bg = "#ecfdf5" if etq == "Pagamentos" else "#eff6ff"
                 etq_border = "#a7f3d0" if etq == "Pagamentos" else "#bfdbfe"
                 etq_icon = "💳" if etq == "Pagamentos" else "📄"
+                setor_sig = proj.get('setor_sigla') or 'STI'
 
                 coluna_projeto = f"""
                 <td rowspan="{total_p}" style="padding: 12px; vertical-align: top; font-weight: bold; font-size: 14px; color: #1e3a8a; border-right: 2px solid #cbd5e1; background: #f8fafc;">
-                    <span style="display: inline-block; font-size: 10px; font-weight: bold; padding: 2px 7px; border-radius: 9999px; background: {etq_bg}; color: {etq_cor}; border: 1px solid {etq_border}; margin-bottom: 6px;">{etq_icon} {etq}</span><br>
+                    <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px;">
+                        <span style="display: inline-block; font-size: 10px; font-weight: bold; padding: 2px 7px; border-radius: 9999px; background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe;">🏢 {setor_sig}</span>
+                        <span style="display: inline-block; font-size: 10px; font-weight: bold; padding: 2px 7px; border-radius: 9999px; background: {etq_bg}; color: {etq_cor}; border: 1px solid {etq_border};">{etq_icon} {etq}</span>
+                    </div>
                     {proj['nome']}
                     <span style="display: block; font-size: 11px; color: #64748b; font-weight: normal; margin-top: 4px;">({total_p} processos vinculados)</span>
                 </td>
@@ -352,11 +357,12 @@ def gerar_relatorio_executivo_formal_html(usuario="STI"):
         etq_bg = "#ecfdf5" if etq == "Pagamentos" else "#eff6ff"
         etq_border = "#a7f3d0" if etq == "Pagamentos" else "#bfdbfe"
         etq_icon = "💳" if etq == "Pagamentos" else "📄"
+        setor_sig = proj.get('setor_sigla') or 'STI'
 
         linhas_html.append(f"""
         <div class="projeto-bloco">
           <div class="projeto-header">
-            <h3>{idx_proj}. {proj['nome']} <span style="font-size: 11px; padding: 2px 8px; border-radius: 9999px; background: {etq_bg}; color: {etq_cor}; border: 1px solid {etq_border}; font-weight: bold; margin-left: 8px;">{etq_icon} {etq}</span></h3>
+            <h3>{idx_proj}. {proj['nome']} <span style="font-size: 11px; padding: 2px 8px; border-radius: 9999px; background: #e0e7ff; color: #3730a3; border: 1px solid #c7d2fe; font-weight: bold; margin-left: 8px;">🏢 {setor_sig}</span> <span style="font-size: 11px; padding: 2px 8px; border-radius: 9999px; background: {etq_bg}; color: {etq_cor}; border: 1px solid {etq_border}; font-weight: bold; margin-left: 4px;">{etq_icon} {etq}</span></h3>
             {f'<p class="projeto-desc"><strong>Objeto:</strong> {proj["descricao"]}</p>' if proj.get("descricao") else ''}
           </div>
           <table class="tabela-executiva">

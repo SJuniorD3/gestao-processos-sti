@@ -68,6 +68,7 @@
           <span>👤</span>
           <span id="labelNomeUsuario" style="font-weight: 700; color: #0f172a; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Carregando...</span>
           <span id="badgePerfilUsuario" style="font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; background: #dbeafe; color: #1e40af;">Admin</span>
+          <span id="badgeSetorUsuario" style="font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; background: #e0e7ff; color: #3730a3;" title="Setor SEDUC do Usuário">STI</span>
         </div>
 
         <button class="btn btn-outline" style="border-color: #fecaca; color: #ef4444;" onclick="fazerLogout()" title="Encerrar sessão com segurança">
@@ -174,6 +175,10 @@
       <!-- Filtros Rápidos Facetados -->
       <div class="toolbar-bottom-row">
         <span style="color: #64748b; font-weight: 600;">Filtrar por:</span>
+
+        <select id="filtroSetor" class="filter-select" onchange="filtrarTabela()">
+          <option value="">🏢 Todos os Setores SEDUC</option>
+        </select>
 
         <select id="filtroEtiqueta" class="filter-select" onchange="filtrarTabela()">
           <option value="">Todas as Etiquetas</option>
@@ -336,16 +341,22 @@
       </div>
       <form id="formNovoProjeto" onsubmit="salvarNovoProjeto(event)">
         <div class="modal-body">
+          <div class="form-group">
+            <label for="novoProjNome">Nome do Projeto *</label>
+            <input type="text" id="novoProjNome" required placeholder="Ex: PROTOCOLO WEB, DUARTE JR">
+          </div>
           <div class="form-row">
-            <div class="form-group col-6">
-              <label for="novoProjNome">Nome do Projeto *</label>
-              <input type="text" id="novoProjNome" required placeholder="Ex: PROTOCOLO WEB, DUARTE JR">
-            </div>
             <div class="form-group col-6">
               <label for="novoProjEtiqueta">Etiqueta do Projeto *</label>
               <select id="novoProjEtiqueta">
                 <option value="Contratos">1 - Contratos</option>
                 <option value="Pagamentos">2 - Pagamentos</option>
+              </select>
+            </div>
+            <div class="form-group col-6">
+              <label for="novoProjSetor">Setor SEDUC Responsável *</label>
+              <select id="novoProjSetor" required>
+                <!-- Preenchido dinamicamente via /api/setores -->
               </select>
             </div>
           </div>
@@ -376,16 +387,22 @@
             <select id="editProjSelect" class="filter-select" style="width: 100%; padding: 8px 12px;" onchange="selecionarProjetoParaEditar(this.value)"></select>
           </div>
           <input type="hidden" id="editProjId">
+          <div class="form-group">
+            <label for="editProjNome">Nome do Projeto *</label>
+            <input type="text" id="editProjNome" required placeholder="Ex: DUARTE JR">
+          </div>
           <div class="form-row">
-            <div class="form-group col-6">
-              <label for="editProjNome">Nome do Projeto *</label>
-              <input type="text" id="editProjNome" required placeholder="Ex: DUARTE JR">
-            </div>
             <div class="form-group col-6">
               <label for="editProjEtiqueta">Etiqueta do Projeto *</label>
               <select id="editProjEtiqueta">
                 <option value="Contratos">1 - Contratos</option>
                 <option value="Pagamentos">2 - Pagamentos</option>
+              </select>
+            </div>
+            <div class="form-group col-6">
+              <label for="editProjSetor">Setor SEDUC Responsável *</label>
+              <select id="editProjSetor" required>
+                <!-- Preenchido dinamicamente via /api/setores -->
               </select>
             </div>
           </div>
@@ -398,6 +415,11 @@
         <div class="modal-footer">
           <button type="button" class="btn btn-danger" style="margin-right: auto;" onclick="excluirProjetoAtual()">Excluir Projeto</button>
           <button type="button" class="btn btn-secondary" onclick="fecharModalEditarProjeto()">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Atualizar Projeto</button>
+        </div>
+      </form>
+    </div>
+  </div>
           <button type="submit" class="btn btn-primary">Atualizar Projeto</button>
         </div>
       </form>
@@ -649,13 +671,13 @@
     </div>
   </div>
 
-  <!-- MODAL: GESTÃO DE USUÁRIOS E AUDITORIA (MULTI-USUÁRIO & RBAC) -->
+  <!-- MODAL: GESTÃO DE USUÁRIOS, SETORES E AUDITORIA (MULTI-USUÁRIO & RBAC) -->
   <div class="modal-overlay" id="modalUsuarios">
     <div class="modal-content modal-content-lg">
       <div class="modal-header">
         <div class="modal-header-text">
-          <h2>Controle de Usuários & Auditoria</h2>
-          <span>Gerencie os perfis de acesso e consulte o histórico de operações do sistema</span>
+          <h2>Controle de Usuários, Setores & Auditoria</h2>
+          <span>Gerencie os perfis de acesso, setores da SEDUC e consulte a trilha de auditoria</span>
         </div>
         <button type="button" class="btn-close" onclick="fecharModalUsuarios()">&times;</button>
       </div>
@@ -664,6 +686,9 @@
       <div style="display: flex; border-bottom: 1px solid #e2e8f0; background: #f8fafc; padding: 0 20px;">
         <button type="button" id="tabBtnUsuarios" class="view-btn active" style="border-radius: 0; padding: 12px 16px; border-bottom: 2px solid #2563eb; font-weight: 700;" onclick="alternarAbaUsuarios('usuarios')">
           👥 Usuários Cadastrados
+        </button>
+        <button type="button" id="tabBtnSetores" class="view-btn" style="border-radius: 0; padding: 12px 16px; font-weight: 600;" onclick="alternarAbaUsuarios('setores')">
+          🏢 Setores da SEDUC
         </button>
         <button type="button" id="tabBtnAuditoria" class="view-btn" style="border-radius: 0; padding: 12px 16px; font-weight: 600;" onclick="alternarAbaUsuarios('auditoria')">
           📜 Trilha de Auditoria
@@ -689,17 +714,23 @@
                 </div>
               </div>
               <div class="form-row">
-                <div class="form-group col-6">
-                  <label for="formUsuarioSenha" id="lblUsuarioSenha">Senha *</label>
-                  <input type="password" id="formUsuarioSenha" required placeholder="Digite uma senha forte...">
-                </div>
-                <div class="form-group col-6">
+                <div class="form-group col-4">
                   <label for="formUsuarioPerfil">Perfil de Acesso *</label>
                   <select id="formUsuarioPerfil" required>
                     <option value="operador">Operador (Cadastra, edita e sincroniza)</option>
                     <option value="admin">Administrador (Acesso total + Gestão de Usuários)</option>
                     <option value="leitor">Leitor (Apenas visualização e relatórios)</option>
                   </select>
+                </div>
+                <div class="form-group col-4">
+                  <label for="formUsuarioSetor">Setor SEDUC *</label>
+                  <select id="formUsuarioSetor" required>
+                    <!-- Preenchido dinamicamente via /api/setores -->
+                  </select>
+                </div>
+                <div class="form-group col-4">
+                  <label for="formUsuarioSenha" id="lblUsuarioSenha">Senha *</label>
+                  <input type="password" id="formUsuarioSenha" required placeholder="Digite uma senha forte...">
                 </div>
               </div>
               <div style="display: flex; justify-content: flex-end; gap: 8px;">
@@ -717,6 +748,7 @@
                   <th style="padding: 10px 12px; text-align: left; color: #475569; font-weight: 700;">Nome</th>
                   <th style="padding: 10px 12px; text-align: left; color: #475569; font-weight: 700;">Login</th>
                   <th style="padding: 10px 12px; text-align: left; color: #475569; font-weight: 700;">Perfil</th>
+                  <th style="padding: 10px 12px; text-align: left; color: #475569; font-weight: 700;">Setor</th>
                   <th style="padding: 10px 12px; text-align: left; color: #475569; font-weight: 700;">Status</th>
                   <th style="padding: 10px 12px; text-align: center; color: #475569; font-weight: 700; width: 150px;">Ações</th>
                 </tr>
@@ -728,7 +760,56 @@
           </div>
         </div>
 
-        <!-- ABA 2: TRILHA DE AUDITORIA -->
+        <!-- ABA 2: SETORES DA SEDUC -->
+        <div id="abaConteudoSetores" style="display: none;">
+          <!-- Formulário de Criação / Edição de Setor -->
+          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 20px;">
+            <h3 id="tituloFormSetor" style="font-size: 13.5px; font-weight: 700; color: #0f172a; margin-bottom: 12px;">+ Cadastrar Novo Setor SEDUC</h3>
+            <form id="formSetor" onsubmit="salvarSetor(event)">
+              <input type="hidden" id="formSetorId">
+              <div class="form-row">
+                <div class="form-group col-3">
+                  <label for="formSetorSigla">Sigla do Setor *</label>
+                  <input type="text" id="formSetorSigla" required placeholder="Ex: STI, SAOFC, ASJUR" style="text-transform: uppercase;">
+                </div>
+                <div class="form-group col-6">
+                  <label for="formSetorNome">Nome Completo do Setor *</label>
+                  <input type="text" id="formSetorNome" required placeholder="Ex: Superintendência de Tecnologia da Informação">
+                </div>
+                <div class="form-group col-3">
+                  <label for="formSetorAtivo">Status *</label>
+                  <select id="formSetorAtivo">
+                    <option value="1">Ativo</option>
+                    <option value="0">Inativo</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" class="btn btn-secondary" id="btnCancelarEdicaoSetor" onclick="cancelarEdicaoSetor()" style="display: none;">Cancelar Edição</button>
+                <button type="submit" class="btn btn-primary" id="btnSalvarSetor">Salvar Setor</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Tabela de Setores -->
+          <div style="border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #ffffff;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 12.5px;">
+              <thead style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                <tr>
+                  <th style="padding: 10px 12px; text-align: left; color: #475569; font-weight: 700; width: 100px;">Sigla</th>
+                  <th style="padding: 10px 12px; text-align: left; color: #475569; font-weight: 700;">Nome Completo</th>
+                  <th style="padding: 10px 12px; text-align: left; color: #475569; font-weight: 700; width: 100px;">Status</th>
+                  <th style="padding: 10px 12px; text-align: center; color: #475569; font-weight: 700; width: 150px;">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="tabelaSetoresCorpo">
+                <!-- Linhas inseridas dinamicamente -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ABA 3: TRILHA DE AUDITORIA -->
         <div id="abaConteudoAuditoria" style="display: none;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; flex-wrap: wrap;">
             <div style="font-size: 12.5px; color: #64748b;">

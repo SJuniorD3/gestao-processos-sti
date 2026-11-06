@@ -206,6 +206,17 @@ def init_db():
         cursor = conn.cursor()
         
         if conn.is_postgres:
+            # 0. Tabela de Setores da SEDUC (PostgreSQL / Supabase)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS setores (
+                    id SERIAL PRIMARY KEY,
+                    sigla TEXT NOT NULL UNIQUE,
+                    nome TEXT NOT NULL,
+                    ativo INTEGER DEFAULT 1,
+                    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # 1. Tabela de Projetos (PostgreSQL / Supabase)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS projetos (
@@ -213,6 +224,7 @@ def init_db():
                     nome TEXT NOT NULL UNIQUE,
                     descricao TEXT,
                     etiqueta TEXT DEFAULT 'Contratos',
+                    setor_sigla TEXT DEFAULT 'STI',
                     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -269,6 +281,7 @@ def init_db():
                     usuario TEXT NOT NULL UNIQUE,
                     senha_hash TEXT NOT NULL,
                     perfil TEXT NOT NULL DEFAULT 'operador',
+                    setor_sigla TEXT DEFAULT 'STI',
                     ativo INTEGER DEFAULT 1,
                     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -301,6 +314,17 @@ def init_db():
                 )
             """)
         else:
+            # 0. Tabela de Setores da SEDUC (SQLite)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS setores (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sigla TEXT NOT NULL UNIQUE,
+                    nome TEXT NOT NULL,
+                    ativo INTEGER DEFAULT 1,
+                    criado_em TEXT DEFAULT (datetime('now', 'localtime'))
+                )
+            """)
+
             # 1. Tabela de Projetos (SQLite)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS projetos (
@@ -308,6 +332,7 @@ def init_db():
                     nome TEXT NOT NULL UNIQUE,
                     descricao TEXT,
                     etiqueta TEXT DEFAULT 'Contratos',
+                    setor_sigla TEXT DEFAULT 'STI',
                     criado_em TEXT DEFAULT (datetime('now', 'localtime'))
                 )
             """)
@@ -366,6 +391,7 @@ def init_db():
                     usuario TEXT NOT NULL UNIQUE,
                     senha_hash TEXT NOT NULL,
                     perfil TEXT NOT NULL DEFAULT 'operador',
+                    setor_sigla TEXT DEFAULT 'STI',
                     ativo INTEGER DEFAULT 1,
                     criado_em TEXT DEFAULT (datetime('now', 'localtime'))
                 )
@@ -399,18 +425,54 @@ def init_db():
                 )
             """)
 
-        # Migração de coluna: etiqueta na tabela de projetos (SQLite e PostgreSQL)
+        # Migração de coluna: etiqueta e setor_sigla na tabela de projetos (SQLite e PostgreSQL)
         try:
             if conn.is_postgres:
                 cursor.execute("ALTER TABLE projetos ADD COLUMN IF NOT EXISTS etiqueta TEXT DEFAULT 'Contratos'")
+                cursor.execute("ALTER TABLE projetos ADD COLUMN IF NOT EXISTS setor_sigla TEXT DEFAULT 'STI'")
             else:
                 cursor.execute("PRAGMA table_info(projetos)")
                 colunas_proj = [col["name"] for col in cursor.fetchall()]
                 if "etiqueta" not in colunas_proj:
                     cursor.execute("ALTER TABLE projetos ADD COLUMN etiqueta TEXT DEFAULT 'Contratos'")
+                if "setor_sigla" not in colunas_proj:
+                    cursor.execute("ALTER TABLE projetos ADD COLUMN setor_sigla TEXT DEFAULT 'STI'")
             cursor.execute("UPDATE projetos SET etiqueta = 'Contratos' WHERE etiqueta IS NULL OR etiqueta = ''")
+            cursor.execute("UPDATE projetos SET setor_sigla = 'STI' WHERE setor_sigla IS NULL OR setor_sigla = ''")
         except Exception as e_mig:
-            print(f"[!] Aviso na migração de etiqueta de projetos: {e_mig}")
+            print(f"[!] Aviso na migração de projetos: {e_mig}")
+
+        # Migração de coluna: setor_sigla na tabela de usuarios (SQLite e PostgreSQL)
+        try:
+            if conn.is_postgres:
+                cursor.execute("ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS setor_sigla TEXT DEFAULT 'STI'")
+            else:
+                cursor.execute("PRAGMA table_info(usuarios)")
+                colunas_user = [col["name"] for col in cursor.fetchall()]
+                if "setor_sigla" not in colunas_user:
+                    cursor.execute("ALTER TABLE usuarios ADD COLUMN setor_sigla TEXT DEFAULT 'STI'")
+            cursor.execute("UPDATE usuarios SET setor_sigla = 'STI' WHERE setor_sigla IS NULL OR setor_sigla = ''")
+        except Exception as e_mig_u:
+            print(f"[!] Aviso na migração de usuarios: {e_mig_u}")
+
+        # Carga inicial padrão de Setores da SEDUC
+        try:
+            setores_iniciais = [
+                ("STI", "Superintendência de Tecnologia da Informação"),
+                ("SAOFC", "Secretaria Adjunta de Orçamento, Finanças e Contabilidade"),
+                ("ASJUR", "Assessoria Jurídica"),
+                ("GAB", "Gabinete da Secretaria"),
+                ("CPL", "Comissão Permanente de Licitação"),
+                ("DA", "Diretoria de Administração"),
+                ("SGP", "Superintendência de Gestão de Pessoas"),
+                ("SEDUC", "Secretaria de Estado da Educação - Sede")
+            ]
+            for s_sigla, s_nome in setores_iniciais:
+                cursor.execute("SELECT id FROM setores WHERE UPPER(sigla) = ?", (s_sigla.upper(),))
+                if not cursor.fetchone():
+                    cursor.execute("INSERT INTO setores (sigla, nome, ativo) VALUES (?, ?, 1)", (s_sigla.upper(), s_nome))
+        except Exception as e_sec:
+            print(f"[!] Aviso ao verificar setores iniciais: {e_sec}")
 
         # Migração e normalização automática de datas para dia/mês/ano (DD/MM/AAAA)
         try:
@@ -443,8 +505,8 @@ def init_db():
                 admin_password = (ADMIN_PASS or "STIadmin").strip()
                 hash_admin = gerar_hash_senha(admin_password)
                 cursor.execute("""
-                    INSERT INTO usuarios (nome, usuario, senha_hash, perfil, ativo)
-                    VALUES (?, ?, ?, 'admin', 1)
+                    INSERT INTO usuarios (nome, usuario, senha_hash, perfil, setor_sigla, ativo)
+                    VALUES (?, ?, ?, 'admin', 'STI', 1)
                 """, ("Administrador STI", admin_username, hash_admin))
                 
                 cursor.execute("""
@@ -457,6 +519,105 @@ def init_db():
         conn.commit()
 
 # -------------------------------------------------------------
+# GESTÃO DE SETORES DA SEDUC
+# -------------------------------------------------------------
+def listar_setores(apenas_ativos=False):
+    """Retorna a lista de setores da SEDUC cadastrados."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        query = "SELECT id, sigla, nome, ativo, criado_em FROM setores"
+        if apenas_ativos:
+            query += " WHERE ativo = 1"
+        query += " ORDER BY sigla ASC"
+        cursor.execute(query)
+        return cursor.fetchall()
+
+def obter_setor(setor_id):
+    """Busca um setor pelo seu ID numérico."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, sigla, nome, ativo, criado_em FROM setores WHERE id = ?", (setor_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def obter_setor_por_sigla(sigla):
+    """Busca um setor pela sigla (case-insensitive)."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, sigla, nome, ativo, criado_em FROM setores WHERE UPPER(sigla) = ?", (str(sigla).strip().upper(),))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+def criar_setor(sigla, nome):
+    """Cadastra um novo setor da SEDUC no sistema."""
+    s_limpa = str(sigla).strip().upper()
+    n_limpo = str(nome).strip()
+    if not s_limpa or not n_limpo:
+        raise ValueError("Sigla e Nome do setor são obrigatórios.")
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM setores WHERE UPPER(sigla) = ?", (s_limpa,))
+        if cursor.fetchone():
+            raise ValueError(f"O setor com a sigla '{s_limpa}' já existe no sistema.")
+        cursor.execute("""
+            INSERT INTO setores (sigla, nome, ativo)
+            VALUES (?, ?, 1)
+        """, (s_limpa, n_limpo))
+        conn.commit()
+        return cursor.lastrowid
+
+def atualizar_setor(setor_id, sigla, nome, ativo=1):
+    """Atualiza a sigla, o nome e o status de um setor da SEDUC."""
+    s_limpa = str(sigla).strip().upper()
+    n_limpo = str(nome).strip()
+    ativo_val = 1 if int(ativo) == 1 else 0
+    if not s_limpa or not n_limpo:
+        raise ValueError("Sigla e Nome do setor são obrigatórios.")
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM setores WHERE UPPER(sigla) = ? AND id != ?", (s_limpa, setor_id))
+        if cursor.fetchone():
+            raise ValueError(f"A sigla '{s_limpa}' já está sendo utilizada por outro setor.")
+        cursor.execute("""
+            UPDATE setores
+            SET sigla = ?, nome = ?, ativo = ?
+            WHERE id = ?
+        """, (s_limpa, n_limpo, ativo_val, setor_id))
+        conn.commit()
+        return cursor.rowcount > 0
+
+def excluir_setor(setor_id):
+    """Remove ou desativa um setor caso haja registros vinculados."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT sigla FROM setores WHERE id = ?", (setor_id,))
+        row = cursor.fetchone()
+        if not row:
+            return False
+        sigla = row["sigla"].upper()
+
+        # Verifica se há usuários ou projetos com essa sigla
+        cursor.execute("SELECT COUNT(*) AS total FROM usuarios WHERE UPPER(setor_sigla) = ?", (sigla,))
+        u_cnt = cursor.fetchone()
+        total_u = u_cnt["total"] if u_cnt else 0
+
+        cursor.execute("SELECT COUNT(*) AS total FROM projetos WHERE UPPER(setor_sigla) = ?", (sigla,))
+        p_cnt = cursor.fetchone()
+        total_p = p_cnt["total"] if p_cnt else 0
+
+        if total_u > 0 or total_p > 0:
+            # Desativa o setor para manter a integridade dos dados históricos
+            cursor.execute("UPDATE setores SET ativo = 0 WHERE id = ?", (setor_id,))
+            conn.commit()
+            return True
+
+        cursor.execute("DELETE FROM setores WHERE id = ?", (setor_id,))
+        conn.commit()
+        return True
+
+# -------------------------------------------------------------
 # GESTÃO DE USUÁRIOS E PERMISSÕES (RBAC)
 # -------------------------------------------------------------
 def obter_usuario_por_login(usuario):
@@ -466,21 +627,31 @@ def obter_usuario_por_login(usuario):
         u_limpo = str(usuario).strip().lower()
         cursor.execute("SELECT * FROM usuarios WHERE LOWER(usuario) = ?", (u_limpo,))
         row = cursor.fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        u_dict = dict(row)
+        if not u_dict.get("setor_sigla"):
+            u_dict["setor_sigla"] = "STI"
+        return u_dict
 
 def obter_usuario_por_id(user_id):
     """Busca usuário pelo ID (sem retornar o hash de senha)."""
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, nome, usuario, perfil, ativo, criado_em FROM usuarios WHERE id = ?", (user_id,))
+        cursor.execute("SELECT id, nome, usuario, perfil, setor_sigla, ativo, criado_em FROM usuarios WHERE id = ?", (user_id,))
         row = cursor.fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        u_dict = dict(row)
+        if not u_dict.get("setor_sigla"):
+            u_dict["setor_sigla"] = "STI"
+        return u_dict
 
 def listar_usuarios():
     """Retorna lista de todos os usuários cadastrados (sem as senhas)."""
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, nome, usuario, perfil, ativo, criado_em FROM usuarios ORDER BY id ASC")
+        cursor.execute("SELECT id, nome, usuario, perfil, setor_sigla, ativo, criado_em FROM usuarios ORDER BY id ASC")
         rows = cursor.fetchall()
         
         # Garante que o administrador padrão conste no banco e na listagem
@@ -490,21 +661,29 @@ def listar_usuarios():
             try:
                 hash_admin = gerar_hash_senha((ADMIN_PASS or "STIadmin").strip())
                 cursor.execute("""
-                    INSERT INTO usuarios (nome, usuario, senha_hash, perfil, ativo)
-                    VALUES (?, ?, ?, 'admin', 1)
+                    INSERT INTO usuarios (nome, usuario, senha_hash, perfil, setor_sigla, ativo)
+                    VALUES (?, ?, ?, 'admin', 'STI', 1)
                 """, ("Administrador STI", admin_user, hash_admin))
                 conn.commit()
-                cursor.execute("SELECT id, nome, usuario, perfil, ativo, criado_em FROM usuarios ORDER BY id ASC")
+                cursor.execute("SELECT id, nome, usuario, perfil, setor_sigla, ativo, criado_em FROM usuarios ORDER BY id ASC")
                 rows = cursor.fetchall()
             except Exception as e:
                 print(f"[!] Erro ao auto-inserir admin padrão em listar_usuarios: {e}")
-        return rows
+        
+        resultado = []
+        for r in rows:
+            u_dict = dict(r)
+            if not u_dict.get("setor_sigla"):
+                u_dict["setor_sigla"] = "STI"
+            resultado.append(u_dict)
+        return resultado
 
-def criar_usuario(nome, usuario, senha, perfil="operador"):
-    """Cadastra um novo usuário no sistema com senha criptografada."""
+def criar_usuario(nome, usuario, senha, perfil="operador", setor_sigla="STI"):
+    """Cadastra um novo usuário no sistema com senha criptografada e vinculação ao seu setor."""
     u_limpo = str(usuario).strip().lower()
     n_limpo = str(nome).strip()
     p_limpo = str(perfil).strip().lower()
+    s_limpo = str(setor_sigla or "STI").strip().upper()
     if p_limpo not in ("admin", "operador", "leitor"):
         p_limpo = "operador"
 
@@ -513,33 +692,38 @@ def criar_usuario(nome, usuario, senha, perfil="operador"):
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO usuarios (nome, usuario, senha_hash, perfil, ativo)
-            VALUES (?, ?, ?, ?, 1)
-        """, (n_limpo, u_limpo, hash_s, p_limpo))
+            INSERT INTO usuarios (nome, usuario, senha_hash, perfil, setor_sigla, ativo)
+            VALUES (?, ?, ?, ?, ?, 1)
+        """, (n_limpo, u_limpo, hash_s, p_limpo, s_limpo))
         conn.commit()
         return cursor.lastrowid
 
-def atualizar_usuario(user_id, nome, perfil, ativo=1, nova_senha=None):
-    """Atualiza dados do usuário e opcionalmente redefine sua senha."""
+def atualizar_usuario(user_id, nome, perfil, ativo=1, nova_senha=None, setor_sigla=None):
+    """Atualiza dados do usuário, setor e opcionalmente redefine sua senha."""
     p_limpo = str(perfil).strip().lower()
     if p_limpo not in ("admin", "operador", "leitor"):
         p_limpo = "operador"
 
     with get_connection() as conn:
         cursor = conn.cursor()
+        updates = ["nome = ?", "perfil = ?", "ativo = ?"]
+        params = [str(nome).strip(), p_limpo, int(ativo)]
+
+        if setor_sigla:
+            updates.append("setor_sigla = ?")
+            params.append(str(setor_sigla).strip().upper())
+
         if nova_senha and str(nova_senha).strip():
             hash_s = gerar_hash_senha(str(nova_senha).strip())
-            cursor.execute("""
-                UPDATE usuarios
-                SET nome = ?, perfil = ?, ativo = ?, senha_hash = ?
-                WHERE id = ?
-            """, (str(nome).strip(), p_limpo, int(ativo), hash_s, user_id))
-        else:
-            cursor.execute("""
-                UPDATE usuarios
-                SET nome = ?, perfil = ?, ativo = ?
-                WHERE id = ?
-            """, (str(nome).strip(), p_limpo, int(ativo), user_id))
+            updates.append("senha_hash = ?")
+            params.append(hash_s)
+
+        params.append(user_id)
+        cursor.execute(f"""
+            UPDATE usuarios
+            SET {', '.join(updates)}
+            WHERE id = ?
+        """, tuple(params))
         conn.commit()
         return True
 
@@ -595,19 +779,20 @@ def seed_initial_data(conn):
     """Carga inicial desativada - sistema pronto e 100% zerado para novos cadastros."""
     pass
 
-def obter_ou_criar_projeto(nome, descricao="", etiqueta="Contratos", conn=None):
-    """Garante que o projeto seja único e retorna seu ID, salvando ou atualizando a etiqueta (Contratos ou Pagamentos)."""
+def obter_ou_criar_projeto(nome, descricao="", etiqueta="Contratos", setor_sigla="STI", conn=None):
+    """Garante que o projeto seja único e retorna seu ID, salvando ou atualizando a etiqueta e o setor responsável."""
     deve_fechar = False
     if conn is None:
         conn = get_connection()
         deve_fechar = True
 
     etiqueta_limpa = "Pagamentos" if str(etiqueta or "").strip().lower() == "pagamentos" else "Contratos"
+    setor_limpo = str(setor_sigla or "STI").strip().upper()
 
     try:
         cursor = conn.cursor()
         nome_limpo = nome.strip().upper()
-        cursor.execute("SELECT id, descricao, etiqueta FROM projetos WHERE UPPER(nome) = ?", (nome_limpo,))
+        cursor.execute("SELECT id, descricao, etiqueta, setor_sigla FROM projetos WHERE UPPER(nome) = ?", (nome_limpo,))
         row = cursor.fetchone()
         if row:
             updates = []
@@ -619,13 +804,16 @@ def obter_ou_criar_projeto(nome, descricao="", etiqueta="Contratos", conn=None):
             if etiqueta and (not row.get("etiqueta") or (str(etiqueta).strip() and row.get("etiqueta") != etiqueta_limpa and etiqueta != "Contratos")):
                 updates.append("etiqueta = ?")
                 params.append(etiqueta_limpa)
+            if setor_sigla and (not row.get("setor_sigla") or (row.get("setor_sigla") != setor_limpo and setor_sigla != "STI")):
+                updates.append("setor_sigla = ?")
+                params.append(setor_limpo)
             if updates:
                 params.append(row["id"])
                 cursor.execute(f"UPDATE projetos SET {', '.join(updates)} WHERE id = ?", tuple(params))
                 conn.commit()
             return row["id"]
         
-        cursor.execute("INSERT INTO projetos (nome, descricao, etiqueta) VALUES (?, ?, ?)", (nome.strip(), descricao.strip(), etiqueta_limpa))
+        cursor.execute("INSERT INTO projetos (nome, descricao, etiqueta, setor_sigla) VALUES (?, ?, ?, ?)", (nome.strip(), descricao.strip(), etiqueta_limpa, setor_limpo))
         conn.commit()
         return cursor.lastrowid
     finally:
@@ -643,20 +831,23 @@ def obter_projeto(projeto_id):
         p_dict = dict(row)
         if not p_dict.get("etiqueta"):
             p_dict["etiqueta"] = "Contratos"
+        if not p_dict.get("setor_sigla"):
+            p_dict["setor_sigla"] = "STI"
         return p_dict
 
-def atualizar_projeto(projeto_id, nome, descricao="", etiqueta="Contratos"):
-    """Permite editar o nome, a descrição/objeto e a etiqueta (Contratos ou Pagamentos) de um projeto."""
+def atualizar_projeto(projeto_id, nome, descricao="", etiqueta="Contratos", setor_sigla="STI"):
+    """Permite editar o nome, a descrição/objeto, a etiqueta e o setor responsável de um projeto."""
     with get_connection() as conn:
         cursor = conn.cursor()
         nome_limpo = nome.strip()
         desc_limpa = descricao.strip()
         etiqueta_limpa = "Pagamentos" if str(etiqueta or "").strip().lower() == "pagamentos" else "Contratos"
+        setor_limpo = str(setor_sigla or "STI").strip().upper()
         cursor.execute("""
             UPDATE projetos
-            SET nome = ?, descricao = ?, etiqueta = ?
+            SET nome = ?, descricao = ?, etiqueta = ?, setor_sigla = ?
             WHERE id = ?
-        """, (nome_limpo, desc_limpa, etiqueta_limpa, projeto_id))
+        """, (nome_limpo, desc_limpa, etiqueta_limpa, setor_limpo, projeto_id))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -668,13 +859,17 @@ def excluir_projeto(projeto_id):
         conn.commit()
         return cursor.rowcount > 0
 
-def listar_projetos_com_processos(apenas_monitorados=False):
+def listar_projetos_com_processos(apenas_monitorados=False, setor=None):
     """
     Retorna os projetos agrupados com seus respectivos processos vinculados (SEI / STARTGOV).
+    Permite filtrar por setor (setor_sigla).
     """
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM projetos ORDER BY nome ASC")
+        if setor and str(setor).strip():
+            cursor.execute("SELECT * FROM projetos WHERE UPPER(setor_sigla) = ? ORDER BY nome ASC", (str(setor).strip().upper(),))
+        else:
+            cursor.execute("SELECT * FROM projetos ORDER BY nome ASC")
         projetos_rows = cursor.fetchall()
         
         resultado = []
@@ -682,6 +877,8 @@ def listar_projetos_com_processos(apenas_monitorados=False):
             proj = dict(p_row)
             if not proj.get("etiqueta"):
                 proj["etiqueta"] = "Contratos"
+            if not proj.get("setor_sigla"):
+                proj["setor_sigla"] = "STI"
             
             # Busca processos do projeto
             q_proc = "SELECT * FROM processos WHERE projeto_id = ?"
@@ -698,6 +895,7 @@ def listar_projetos_com_processos(apenas_monitorados=False):
                 proc["projeto"] = proj["nome"]
                 proc["descricao"] = proj["descricao"]
                 proc["etiqueta"] = proj["etiqueta"]
+                proc["setor_sigla"] = proj["setor_sigla"]
                 proc["dias_no_setor"] = calcular_dias_no_setor(proc["data_recebimento"])
                 proc["data_recebimento"] = formatar_data_br(proc["data_recebimento"]) if proc["data_recebimento"] else ""
 
@@ -737,9 +935,9 @@ def listar_projetos_com_processos(apenas_monitorados=False):
 
         return resultado
 
-def listar_processos(apenas_monitorados=False):
+def listar_processos(apenas_monitorados=False, setor=None):
     """
-    Retorna a lista de todos os processos individualmente, contendo o nome e a descrição do seu Projeto.
+    Retorna a lista de todos os processos individualmente, contendo o nome, setor e a descrição do seu Projeto.
     """
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -750,6 +948,7 @@ def listar_processos(apenas_monitorados=False):
                 proj.nome AS projeto,
                 proj.descricao AS descricao,
                 proj.etiqueta AS etiqueta,
+                proj.setor_sigla AS setor_sigla,
                 p.sistema,
                 p.numero_processo,
                 p.local_atual,
@@ -762,11 +961,19 @@ def listar_processos(apenas_monitorados=False):
             FROM processos p
             INNER JOIN projetos proj ON p.projeto_id = proj.id
         """
+        where_clauses = []
+        params = []
         if apenas_monitorados:
-            query += " WHERE p.monitorar = 1"
+            where_clauses.append("p.monitorar = 1")
+        if setor and str(setor).strip():
+            where_clauses.append("UPPER(proj.setor_sigla) = ?")
+            params.append(str(setor).strip().upper())
+
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
         query += " ORDER BY proj.nome ASC, p.id ASC"
 
-        cursor.execute(query)
+        cursor.execute(query, tuple(params) if params else None)
         rows = cursor.fetchall()
 
         resultado = []
@@ -774,6 +981,8 @@ def listar_processos(apenas_monitorados=False):
             proc = dict(row)
             if not proc.get("etiqueta"):
                 proc["etiqueta"] = "Contratos"
+            if not proc.get("setor_sigla"):
+                proc["setor_sigla"] = "STI"
             proc["dias_no_setor"] = calcular_dias_no_setor(proc["data_recebimento"])
             proc["data_recebimento"] = formatar_data_br(proc["data_recebimento"]) if proc["data_recebimento"] else ""
 
@@ -816,6 +1025,7 @@ def obter_processo(processo_id):
                 proj.nome AS projeto,
                 proj.descricao AS descricao,
                 proj.etiqueta AS etiqueta,
+                proj.setor_sigla AS setor_sigla,
                 p.sistema,
                 p.numero_processo,
                 p.local_atual,
@@ -835,6 +1045,8 @@ def obter_processo(processo_id):
         proc = dict(row)
         if not proc.get("etiqueta"):
             proc["etiqueta"] = "Contratos"
+        if not proc.get("setor_sigla"):
+            proc["setor_sigla"] = "STI"
         proc["dias_no_setor"] = calcular_dias_no_setor(proc["data_recebimento"])
         proc["data_recebimento"] = formatar_data_br(proc["data_recebimento"]) if proc["data_recebimento"] else ""
 
@@ -863,9 +1075,10 @@ def criar_processo(dados):
         nome_projeto = dados.get("projeto", "").strip() or "STI"
         descricao_projeto = dados.get("descricao", "").strip()
         etiqueta_projeto = dados.get("etiqueta", "").strip() or "Contratos"
+        setor_projeto = dados.get("setor_sigla", "").strip() or dados.get("setor", "").strip() or "STI"
         
         # Garante o projeto único
-        projeto_id = obter_ou_criar_projeto(nome_projeto, descricao_projeto, etiqueta=etiqueta_projeto, conn=conn)
+        projeto_id = obter_ou_criar_projeto(nome_projeto, descricao_projeto, etiqueta=etiqueta_projeto, setor_sigla=setor_projeto, conn=conn)
 
         cursor = conn.cursor()
         monitorar_val = 1 if dados.get("monitorar", 1) in (1, "1", True, "true", "True") else 0
@@ -913,7 +1126,7 @@ def atualizar_processo(processo_id, dados, registrar_novo_status=True):
 
         # Pega estado anterior
         cursor.execute("""
-            SELECT p.local_atual, p.acao, p.situacao, p.data_recebimento, p.projeto_id, proj.nome as projeto_nome, proj.etiqueta as projeto_etiqueta
+            SELECT p.local_atual, p.acao, p.situacao, p.data_recebimento, p.projeto_id, proj.nome as projeto_nome, proj.etiqueta as projeto_etiqueta, proj.setor_sigla as projeto_setor
             FROM processos p
             INNER JOIN projetos proj ON p.projeto_id = proj.id
             WHERE p.id = ?
@@ -925,7 +1138,8 @@ def atualizar_processo(processo_id, dados, registrar_novo_status=True):
         nome_projeto = dados.get("projeto", "").strip() or anterior["projeto_nome"]
         descricao_projeto = dados.get("descricao", "").strip()
         etiqueta_projeto = dados.get("etiqueta", "").strip() or anterior.get("projeto_etiqueta", "Contratos")
-        projeto_id = obter_ou_criar_projeto(nome_projeto, descricao_projeto, etiqueta=etiqueta_projeto, conn=conn)
+        setor_projeto = dados.get("setor_sigla", "").strip() or dados.get("setor", "").strip() or anterior.get("projeto_setor", "STI")
+        projeto_id = obter_ou_criar_projeto(nome_projeto, descricao_projeto, etiqueta=etiqueta_projeto, setor_sigla=setor_projeto, conn=conn)
 
         monitorar_val = 1 if dados.get("monitorar", 1) in (1, "1", True, "true", "True") else 0
         local_atual = dados.get("local_atual", "").strip() or anterior["local_atual"] or "Aguardando Monitoramento"
