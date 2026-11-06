@@ -481,6 +481,16 @@ def init_db():
         except Exception as e_mig_u:
             print(f"[!] Aviso na migração de usuarios: {e_mig_u}")
 
+        # Índices de Performance e Otimização de Consultas (SQLite e PostgreSQL)
+        try:
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_projetos_setor ON projetos(setor_sigla)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_processos_projeto ON processos(projeto_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_historico_processo ON historico_status(processo_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_usuarios_setor ON usuarios(setor_sigla)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_auditoria_criado ON auditoria_logs(criado_em)")
+        except Exception as e_idx:
+            print(f"[!] Aviso ao criar índices: {e_idx}")
+
         # Carga inicial padrão de Setores da SEDUC
         try:
             setores_iniciais = [

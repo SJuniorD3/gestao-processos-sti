@@ -1,254 +1,189 @@
 # Documentação Técnica e de Arquitetura de Desenvolvimento
 
 **Sistema:** Sistema de Gestão e Monitoramento de Processos por Projeto - STI  
-**Versão Atual:** v2.0  
-**Data da Documentação:** Outubro/2026  
+**Versão Atual:** v3.0 - Homologação  
+**Data da Documentação:** Novembro/2026  
 **Responsável Técnico:** Arquitetura de Software - STI / SEDUC-MA  
 
 ---
 
 ## 1. Visão Geral da Aplicação
 
-O **Sistema de Gestão e Monitoramento de Processos por Projeto - STI** é uma solução corporativa concebida para a Superintendência de Tecnologia da Informação (STI) da Secretaria de Estado da Educação do Maranhão (SEDUC-MA). 
+O **Sistema de Gestão e Monitoramento de Processos por Projeto - STI** é uma solução corporativa concebida para a Superintendência de Tecnologia da Informação (STI) e extensível a todos os setores da **Secretaria de Estado da Educação do Maranhão (SEDUC-MA)**. 
 
-O sistema tem como objetivo centralizar o controle de projetos estratégicos de TI e automatizar o rastreamento contínuo de processos administrativos vinculados que tramitam em ecossistemas distintos:
+O sistema tem como objetivo centralizar o controle de projetos estratégicos, governança multi-setorial por departamentos e automatizar o rastreamento contínuo de processos administrativos vinculados que tramitam em ecossistemas distintos:
 * **SEI (Sistema Eletrônico de Informações - GOVMA)**: Tramitação de processos administrativos eletrônicos padrão do Governo Estadual.
 * **STARTGOV (Portal de Gestão de Compras e Licitações)**: Tramitação de processos de contratação, cotação e termos de referência.
 
-A aplicação opera tanto em modo **Desktop nativo (GUI)** quanto via **Servidor Web e API REST embutida**, possuindo um robô de raspagem (crawler/API client) e um agendador autônomo com envio programado de relatórios consolidados às **08:00, 12:00 e 16:00**.
+A aplicação opera com interface Web SPA moderna em JavaScript vanilla, servidor HTTP/REST integrado, suporte **Dual Database** (SQLite e PostgreSQL/Supabase) e agendador em background para envio programado de relatórios consolidados às **08:00, 12:00 e 16:00**.
 
 ---
 
 ## 2. Arquitetura de Software
 
-A solução segue uma arquitetura modular em camadas desacopladas (**Layered Architecture**), priorizando independência tecnológica, portabilidade no ecossistema Windows corporativo e isolamento de responsabilidades.
+A solução segue uma arquitetura modular em camadas desacopladas (**Layered Architecture**), com separação de responsabilidades e suporte tanto para desenvolvimento local quanto deploy escalável em nuvem.
 
-### 2.1 Diagrama Conceitual de Arquitetura
+### 2.1 Diagrama de Arquitetura do Sistema
 
 ```mermaid
 graph TD
-    subgraph Apresentacao ["Camada de Apresentação"]
-        GUI["GUI Desktop (Tkinter/TTK)<br/>app_gui.py"]
-        WEB["Interface Web SPA<br/>static/index.html & js/app.js"]
-        SHORTCUT["Atalhos de Inicialização<br/>INICIAR_SISTEMA_STI_V2.bat"]
+    subgraph Apresentacao ["Camada de Apresentação (Frontend)"]
+        WEB["Interface Web SPA<br/>static/index.html"]
+        CSS["Design System & Responsividade<br/>static/css/style.css"]
+        JS["Lógica do Cliente & Modais<br/>static/js/app.js"]
     end
 
-    subgraph Orquestracao ["Camada de Controle & Orquestração"]
+    subgraph Controle ["Camada de Controle & REST API"]
+        SERVER["Servidor HTTP / REST API<br/>app_server.py (Autenticação, Sessões & Endpoints)"]
+        AUTH["Módulo de Autenticação & Auditoria<br/>Controle de Perfis (admin, operador, leitor)"]
         SCHED["Agendador em Thread Daemon<br/>scheduler.py (08h, 12h, 16h)"]
         ENGINE["Motor de Monitoramento<br/>monitor_engine.py"]
-        SERVER["Servidor HTTP / REST API<br/>app_server.py (Porta 8080)"]
     end
 
-    subgraph Integracao ["Camada de Integrações & Notificações"]
-        SEI["Integração SEI (Web Scraping)<br/>sei_integration.py"]
-        START["Integração StartGov (REST API)<br/>startgov_integration.py"]
-        NOTIF["Despachante de Alertas<br/>notifier.py (SMTP / Webhook)"]
+    subgraph Integracao ["Camada de Integrações & Robôs"]
+        SEI["Robô de Raspagem SEI (SIP/GOVMA)<br/>integrations/sei_integration.py"]
+        START["Cliente REST API StartGov (JWT)<br/>integrations/startgov_integration.py"]
+        NOTIF["Despachante de Relatórios<br/>notifier.py (SMTP / Webhook)"]
     end
 
-    subgraph Persistencia ["Camada de Dados & Persistência"]
-        DB_MOD["Camada DAO / Normalização<br/>database.py"]
-        SQLITE[("Banco SQLite3<br/>processos_sti.db")]
-        CONFIG["Configurações & Ambiente<br/>config.py & .env"]
+    subgraph Persistencia ["Camada de Dados & Persistência (Dual Database)"]
+        DB_MOD["DAO, Migrações & Tradução SQL<br/>database.py"]
+        SQLITE[("Banco SQLite Local<br/>processos_sti.db")]
+        PG[("PostgreSQL / Supabase<br/>(DATABASE_URL)")]
     end
 
-    SHORTCUT --> GUI
-    GUI --> DB_MOD
-    GUI --> ENGINE
-    GUI --> SCHED
-
+    WEB --> JS
+    JS --> SERVER
+    SERVER --> AUTH
     SERVER --> DB_MOD
     SERVER --> ENGINE
-    SERVER --> SCHED
-    WEB --> SERVER
-
     SCHED --> ENGINE
     SCHED --> NOTIF
     ENGINE --> SEI
     ENGINE --> START
     ENGINE --> DB_MOD
     NOTIF --> DB_MOD
-
     DB_MOD --> SQLITE
-    SEI -.-> CONFIG
-    START -.-> CONFIG
-    NOTIF -.-> CONFIG
-```
-
-### 2.2 Divisão em Camadas
-
-1. **Camada de Apresentação**:
-   - **Interface Desktop (`app_gui.py`)**: Interface gráfica nativa usando Tkinter/TTK. Exibe a tabela hierárquica estilo planilha, cartões de KPI em tempo real, filtros dinâmicos, modais de gestão e hyperlinks diretos aos portais oficiais.
-   - **Interface Web SPA (`static/`)**: Alternativa acessível via navegador na rede interna, com interface responsiva, renderização dinâmica em JavaScript vanilla e consumo de endpoints REST.
-2. **Camada de Orquestração & Agendamento**:
-   - **`scheduler.py`**: Loop independente executado em `threading.Thread(daemon=True)`. Verifica a cada 20 segundos os horários exatos (08:00, 12:00, 16:00) e orquestra o ciclo: *Monitorar Portais -> Atualizar Banco -> Gerar Resumo -> Notificar*.
-   - **`monitor_engine.py`**: Ponto central de execução de sincronização em lote ou individual.
-   - **`app_server.py`**: Servidor HTTP embutido (`http.server.SimpleHTTPRequestHandler`) que serve arquivos estáticos e disponibiliza endpoints JSON para consulta, edição, disparo e exportação CSV.
-3. **Camada de Integrações & Raspagem**:
-   - **`sei_integration.py`**: Conector para o SEI/GOVMA via raspagem de sessão autenticada (SIP), navegação em formulários de pesquisa rápida e extração de histórico de andamento.
-   - **`startgov_integration.py`**: Cliente de API REST para a plataforma StartGov (OAuth/Bearer token), com busca paginada em `type=all` e conversão de fuso horário ISO UTC para Brasília (UTC-3).
-   - **`notifier.py`**: Mecanismo de compilação de relatórios (Markdown e HTML moderno com tabelas consolidadas por projeto) e despacho via SMTP (E-mail) e Webhook HTTP (WhatsApp/Teams/Telegram).
-4. **Camada de Persistência & Configurações**:
-   - **`database.py`**: Encapsulamento de banco de dados SQLite (`processos_sti.db`), integridade referencial com chaves estrangeiras ativas (`PRAGMA foreign_keys = ON`), suporte a migrações em tempo de execução e conversões centralizadas de datas (`DD/MM/AAAA`).
-   - **`config.py`**: Carregamento dinâmico do arquivo `.env` sem dependências externas adicionais.
-
----
-
-## 3. Tecnologias, Frameworks e Dependências
-
-A aplicação foi rigorosamente projetada para ter **mínima dependência externa**, garantindo execução imediata em máquinas corporativas Windows que possuem políticas de segurança restritivas.
-
-| Tecnologia / Módulo | Tipo | Finalidade Principal |
-| :--- | :--- | :--- |
-| **Python 3.10+** | Linguagem Base | Runtime principal da aplicação. |
-| **Tkinter / TTK** | Biblioteca Padrão | Renderização da Interface Gráfica Desktop corporativa (GUI). |
-| **SQLite3** | Biblioteca Padrão | Banco de dados relacional embarcado e serverless (`processos_sti.db`). |
-| **requests** | Dependência Externa (pip) | Comunicação HTTP/HTTPS, gerenciamento de sessões, autenticação e raspagem. |
-| **threading / time** | Biblioteca Padrão | Execução assíncrona do agendador e de tarefas pesadas sem travar a interface gráfica. |
-| **http.server / urllib** | Biblioteca Padrão | Servidor HTTP embutido e manipulação de parâmetros e URLs. |
-| **smtplib / email** | Biblioteca Padrão | Formatação MIME e envio de relatórios executivos por e-mail via TLS. |
-| **csv / io** | Biblioteca Padrão | Exportação de dados compatível com Microsoft Excel (delimitador `;` e encoding `utf-8-sig`). |
-| **webbrowser** | Biblioteca Padrão | Abertura do navegador padrão do sistema operacional com deep-links para os processos. |
-
----
-
-## 4. Estrutura de Pastas e Módulos
-
-```
-gestao-processos-sti/
-│
-├── integrations/                     # Módulos de conexão com sistemas externos
-│   ├── __init__.py                   # Inicializador do pacote e instâncias de clientes
-│   ├── sei_integration.py            # Robô de navegação e extração de dados do SEI (GOVMA)
-│   └── startgov_integration.py       # Cliente da API REST da plataforma StartGov
-│
-├── static/                           # Ativos da Interface Web
-│   ├── css/                          # Folhas de estilo da UI Web
-│   ├── js/
-│   │   └── app.js                    # Lógica do frontend web (consumo de API e interatividade)
-│   └── index.html                    # Single Page Application (SPA) para acesso web
-│
-├── .env                              # Variáveis de ambiente ativas (Credenciais, URLs, SMTP)
-├── .env.example                      # Arquivo de exemplo para configuração do ambiente
-├── app_gui.py                        # Interface Gráfica Principal Desktop (Tkinter - v2.0)
-├── app_server.py                     # Servidor HTTP e API REST interna
-├── config.py                         # Parser do .env e constantes globais do sistema
-├── database.py                       # Camada DAO, schema SQLite, migrações e datas
-├── monitor_engine.py                 # Orquestrador do fluxo de monitoramento de processos
-├── notifier.py                       # Gerador de relatórios executivos e envio SMTP/Webhook
-├── processos_sti.db                  # Banco de dados SQLite persistido localmente
-├── README.md                         # Guia de usuário e introdução da ferramenta
-├── run.py                            # Ponto de entrada para inicialização conjunta do Servidor
-└── scheduler.py                      # Mecanismo de agendamento em segundo plano (08h, 12h, 16h)
+    DB_MOD --> PG
 ```
 
 ---
 
-## 5. Fluxos de Execução Detalhados
+## 3. Estrutura do Banco de Dados (Dual Database: SQLite & PostgreSQL)
 
-### 5.1 Fluxo de Inicialização Desktop (GUI)
-1. O usuário aciona o atalho `INICIAR_SISTEMA_STI_V2.bat` na Área de Trabalho.
-2. O script batch navega até o diretório do projeto e executa `python app_gui.py`.
-3. `app_gui.py` invoca `init_db()`:
-   - Valida ou cria as tabelas `projetos`, `processos`, `historico_status` e `relatorios_gerados`.
-   - Executa migração automática normalizando todas as datas legadas para o padrão `DD/MM/AAAA`.
-4. Inicia a thread do agendador `scheduler.start()`.
-5. Carrega o cache de projetos e renderiza a grade hierárquica por projeto e os cartões de indicadores (KPIs).
+O arquivo `database.py` suporta transparentemente SQLite (local) e PostgreSQL (Supabase/Neon/Render na nuvem). As migrações são executadas automaticamente na inicialização (`init_db()`), com criação de índices e integridade referencial.
 
-### 5.2 Fluxo de Acesso Direto com 1 Clique (Deep-Link v2.0)
-1. Na grade principal, o usuário clica no número de um processo na coluna `Nº PROCESSO (CLIQUE P/ ABRIR)`.
-2. O evento `<Button-1>` dispara `abrir_processo_direto(proc)`:
-   - **Área de Transferência**: O número do processo é copiado para o Clipboard do Windows (`clipboard_append`).
-   - **Navegador**: O navegador padrão é acionado (`webbrowser.open`):
-     - SEI: Abre o painel de procedimentos do SEI (`controlador.php?acao=procedimento_controlar`).
-     - STARTGOV: Abre a listagem filtrando pelo processo (`/processos?type=all&search=...`).
-   - **Feedback Visual**: A barra de status inferior confirma a cópia do número e a abertura da página.
-3. Se o usuário clicar com o **botão direito** (`<Button-3>`), um menu de contexto oferece atalhos para:
-   - Abrir no Portal;
-   - Copiar apenas o número;
-   - Abrir Consulta Pública externa do SEI;
-   - Abrir janela de histórico detalhado interno no sistema.
+### 3.1 Tabelas Principais
 
-### 5.3 Fluxo do Ciclo de Sincronização e Notificação (08h, 12h, 16h)
-1. O loop daemon de `scheduler.py` detecta que a hora atual corresponde a um dos disparos configurados (minuto 00).
-2. O agendador invoca `executar_monitoramento_processos()`:
-   - Recupera todos os processos marcados como ativos (`monitorar = 1`).
-   - Para processos SEI: Autentica via SIP, faz a pesquisa rápida, entra no procedimento, consulta andamento e extrai as 4 linhas mais recentes do histórico completo.
-   - Para processos STARTGOV: Autentica na API REST via JWT, consulta `GET /v1/process?type=all&search=...`, extrai a tramitação mais recente e as 4 movimentações mais recentes.
-   - Atualiza `local_atual`, `situacao`, `acao`, `data_recebimento` e substitui o histórico em `historico_status`.
-3. O agendador invoca `executar_envio_resumo()`:
-   - Compila os dados agrupados por projeto em formato Markdown (Texto) e HTML estilizado para e-mail.
-   - Despacha o e-mail via servidor SMTP (se `EMAIL_ENABLED=true`).
-   - Despacha a mensagem via Webhook (se `WEBHOOK_URL` estiver preenchida).
-   - Registra o log da operação em `relatorios_gerados`.
+1. **`setores`**:
+   - `id`: Chave primária.
+   - `sigla`: Sigla única do setor (`STI`, `SAOFC`, `ASJUR`, `GAB`, `CPL`, `DA`, `SGP`, `SEDUC`).
+   - `nome`: Nome por extenso do setor.
+   - `ativo`: `1` para ativo, `0` para inativo.
+   - `criado_em`: Data e hora de criação.
 
----
+2. **`projetos`**:
+   - `id`: Chave primária.
+   - `nome`: Nome único do projeto (ex.: `DUARTE JR`, `ADESÃO CHROMEBOOK`).
+   - `descricao`: Objeto e escopo compartilhado.
+   - `etiqueta`: Classificação da demanda (`Contratos` ou `Pagamentos`).
+   - `setor_sigla`: Sigla do setor responsável vinculado (padrão `STI`).
+   - `criado_em`: Data de cadastro.
 
-## 6. Procedimento de Instalação e Configuração (Setup)
+3. **`processos`**:
+   - `id`: Chave primária.
+   - `projeto_id`: Chave estrangeira referenciando `projetos(id)` com `ON DELETE CASCADE`.
+   - `sistema`: Origem oficial (`SEI` ou `STARTGOV`).
+   - `numero_processo`: Número oficial único do processo.
+   - `local_atual`: Setor/unidade atual onde o processo se encontra.
+   - `acao`: Providência ou ação imediata no último trâmite.
+   - `data_recebimento`: Data de chegada na unidade atual (formato `DD/MM/AAAA`).
+   - `situacao`: Descrição resumida do andamento atual.
+   - `monitorar`: Indicador de monitoramento ativo (`1` ativo, `0` pausado).
+   - `criado_em` / `atualizado_em`: Timestamps de auditoria.
 
-### 6.1 Pré-requisitos
-* Sistema Operacional: **Microsoft Windows 10/11** ou Windows Server.
-* Runtime: **Python 3.10** ou superior instalado com opção *"Add Python to PATH"* marcada.
-* Permissões de rede: Acesso HTTPS de saída para `sip.sei.ma.gov.br`, `sei.ma.gov.br` e `bid.startgov.com.br`.
+4. **`historico_status`**:
+   - `id`: Chave primária.
+   - `processo_id`: Referência ao processo (`ON DELETE CASCADE`).
+   - `data_registro`: Momento da coleta efetuada pelo robô.
+   - `data_movimentacao`: Data oficial do trâmite (`DD/MM/AAAA HH:MM`).
+   - `local`: Setor no momento do trâmite.
+   - `situacao`: Andamento detalhado ou despacho.
+   - `acao`: Tipo de ação registrada.
+   - `observacao`: Detalhes adicionais / identificação de operador.
 
-### 6.2 Passo a Passo de Setup
-1. **Clonar ou posicionar a pasta do projeto**:
-   ```powershell
-   # Diretório padrão adotado:
-   cd C:\Users\User\.gemini\antigravity\scratch\gestao-processos-sti
-   ```
-2. **Instalação de Dependências**:
-   ```powershell
-   pip install requests
-   ```
-3. **Configuração das Variáveis de Ambiente**:
-   Copie `.env.example` para `.env` e configure suas credenciais:
-   ```ini
-   PORT=8080
-   HOST=127.0.0.1
-   REPORT_HOURS=8,12,16
+5. **`usuarios`**:
+   - `id`: Chave primária.
+   - `nome`: Nome completo do colaborador.
+   - `usuario`: Login único (ex.: `admin`, `vicente`, `klelia`).
+   - `senha_hash`: Hash seguro da senha (`PBKDF2-HMAC-SHA256`).
+   - `perfil`: `admin` (visão geral e configurações), `operador` (gestão do seu setor) ou `leitor` (apenas consulta).
+   - `setor_sigla`: Sigla do setor SEDUC ao qual o usuário está vinculado.
+   - `ativo`: Indicador de conta ativa (`1` ou `0`).
 
-   # Notificações
-   EMAIL_ENABLED=false
-   SMTP_SERVER=smtp.gmail.com
-   SMTP_PORT=587
-   SMTP_USER=seu_email@dominio.com
-   SMTP_PASS=sua_senha_de_app
-   EMAIL_TO=destinatarios@dominio.com
-   WEBHOOK_URL=
+6. **`configuracoes_sistema`**:
+   - `chave` (PK): Chave de configuração (ex.: `email_enabled`, `smtp_server`, `smtp_port`, `smtp_user`, `smtp_pass`, `email_to`, `webhook_url`).
+   - `valor`: Conteúdo configurado.
+   - `atualizado_em`: Timestamp da última modificação.
 
-   # Credenciais SEI (GOVMA / SEDUC)
-   SEI_URL=https://sip.sei.ma.gov.br/sip/login.php?sigla_orgao_sistema=GOVMA&sigla_sistema=SEI&infra_url=L3NlaS8=
-   SEI_USER=seu_cpf_ou_usuario
-   SEI_PASS=sua_senha_sei
+7. **`auditoria_logs`**:
+   - `id`: Chave primária.
+   - `usuario`: Identificador do usuário que executou a ação.
+   - `acao`: Código da operação (ex.: `LOGIN`, `CRIAR_PROJETO`, `ATUALIZAR_SETOR`, `CONFIG_DISPARO`).
+   - `detalhes`: Descrição legível da operação.
+   - `ip`: Endereço IP do cliente.
+   - `criado_em`: Momento da operação.
 
-   # Credenciais STARTGOV
-   STARTGOV_URL=https://bid.startgov.com.br/login
-   STARTGOV_USER=seu_cpf_ou_usuario
-   STARTGOV_PASS=sua_senha_startgov
-   ```
-4. **Execução**:
-   - Para utilizar a interface gráfica desktop:
-     ```powershell
-     python app_gui.py
-     ```
-     *Ou dê um duplo clique no atalho `INICIAR_SISTEMA_STI_V2.bat`.*
-   - Para iniciar o servidor web e agendador em background:
-     ```powershell
-     python run.py
-     ```
+8. **`relatorios_gerados`**:
+   - Histórico de despachos e envios de e-mails/webhooks às 08h, 12h e 16h.
+
+### 3.2 Índices Criados para Otimização
+- `idx_projetos_setor` em `projetos(setor_sigla)`
+- `idx_processos_projeto` em `processos(projeto_id)`
+- `idx_historico_processo` em `historico_status(processo_id)`
+- `idx_usuarios_setor` em `usuarios(setor_sigla)`
+- `idx_auditoria_criado` em `auditoria_logs(criado_em)`
 
 ---
 
-## 7. Padrões Técnicas e Convenções Adotadas
+## 4. Endpoints da REST API (`app_server.py`)
 
-1. **Padronização Temporal Estrita (DD/MM/AAAA)**:
-   - Funções centralizadas `formatar_data_br(date_val)` e `formatar_data_hora_br(date_val)` em `database.py`.
-   - Na persistência, na GUI, nos relatórios HTML e nas exportações CSV, toda data é convertida e apresentada no formato brasileiro `dia/mês/ano` (ou `dia/mês/ano hora:minuto`).
-2. **Concorrência e Responsividade da Interface**:
-   - Chamadas demoradas de rede (raspagem no SEI e consultas no StartGov) **nunca rodam na thread principal** do Tkinter.
-   - Utilização de `threading.Thread(target=..., daemon=True)` com atualização da UI via `root.after(0, ...)`.
-3. **Integridade de Dados e Transações**:
-   - `PRAGMA foreign_keys = ON` habilitado explicitamente em cada conexão aberta no SQLite.
-   - `ON DELETE CASCADE` configurado nas tabelas filhas (`processos` e `historico_status`) para prevenir registros órfãos.
-4. **Interoperabilidade com Excel**:
-   - Exportação CSV utilizando codificação `utf-8-sig` (Byte Order Mark - BOM) e delimitador `;`, evitando caracteres corrompidos no Microsoft Excel brasileiro.
+| Método | Rota | Descrição | Permissão Mínima |
+| :--- | :--- | :--- | :--- |
+| `POST` | `/api/login` | Autenticação com geração de cookie de sessão | Público |
+| `POST` | `/api/logout` | Encerramento de sessão | Autenticado |
+| `GET` | `/api/usuario/atual` | Retorna dados do usuário logado e setor | Autenticado |
+| `GET` | `/api/projetos` | Lista projetos filtrados pelo setor do usuário (ou todos se admin) | Autenticado |
+| `POST` | `/api/projetos` | Criação de novo projeto com etiqueta e setor | Operador / Admin |
+| `PUT` | `/api/projetos/<id>` | Edição de nome, descrição, etiqueta e setor | Operador / Admin |
+| `DELETE` | `/api/projetos/<id>` | Exclusão de projeto e processos vinculados | Admin / Operador |
+| `POST` | `/api/processos` | Cadastro simplificado de processo (SEI/StartGov) | Operador / Admin |
+| `PUT` | `/api/processos/<id>` | Atualização cadastral de processo | Operador / Admin |
+| `DELETE` | `/api/processos/<id>` | Exclusão de processo individual | Operador / Admin |
+| `GET` | `/api/setores` | Lista os setores cadastrados da SEDUC | Autenticado |
+| `POST` | `/api/setores` | Cadastro de novo setor da SEDUC | Admin |
+| `PUT` | `/api/setores/<id>` | Atualização de sigla, nome ou status de setor | Admin |
+| `GET` | `/api/usuarios` | Lista usuários cadastrados com respectivos setores | Admin |
+| `POST` | `/api/usuarios` | Criação de novo usuário | Admin |
+| `PUT` | `/api/usuarios/<id>` | Atualização de perfil, setor ou redefinição de senha | Admin |
+| `GET` | `/api/configuracoes/canais` | Consulta configurações SMTP e Webhook | Admin |
+| `POST` | `/api/configuracoes/canais` | Salva configurações de e-mail e webhook | Admin |
+| `POST` | `/api/configuracoes/canais/testar`| Envio de e-mail/webhook de teste imediato | Admin |
+| `GET` | `/api/sistemas` | Retorna status de credenciais SEI e StartGov | Autenticado |
+| `POST` | `/api/sistemas/testar` | Executa teste de autenticação real nos portais | Admin |
+| `GET` | `/api/auditoria` | Retorna trilha de auditoria com filtro e paginação | Admin |
+| `POST` | `/api/sincronizar` | Executa sincronização manual dos portais via robôs | Operador / Admin |
+| `POST` | `/api/disparar-resumo` | Executa disparo manual do resumo executivo | Operador / Admin |
+| `GET` | `/api/relatorios/resumo` | Gera JSON do relatório consolidado com filtros | Autenticado |
+| `GET` | `/api/relatorios/exportar` | Exportação de relatório em formato CSV/Excel | Autenticado |
+
+---
+
+## 5. Painel Administrativo Unificado (5 Pilares)
+
+O modal administrativo (`#modalUsuarios`) centraliza todas as funcionalidades de governança em 5 abas horizontais:
+1. **`👥 Cadastro & Gestão de Usuários`**: Formulário de criação/edição e tabela com filtro e badges de setor.
+2. **`🏢 Setores da SEDUC`**: Cadastro e ativação de unidades administrativas.
+3. **`📡 Canais de Disparo (E-mail & Webhook)`**: Parâmetros SMTP e mensageria com teste ao vivo.
+4. **`🔑 Portais Oficiais & Robôs`**: Credenciais de órgãos e diagnóstico de autenticação com os servidores SEI e StartGov.
+5. **`📜 Trilha de Auditoria`**: Histórico detalhado de ações administrativas e operacionais.

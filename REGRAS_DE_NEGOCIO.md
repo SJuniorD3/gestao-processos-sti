@@ -1,47 +1,60 @@
 # Especificação de Regras de Negócio e Modelo Operacional
 
 **Sistema:** Sistema de Gestão e Monitoramento de Processos por Projeto - STI  
-**Versão Atual:** v2.0  
-**Área de Negócio:** Superintendência de Tecnologia da Informação (STI)  
+**Versão Atual:** v3.0 - Homologação  
+**Área de Negócio:** Superintendência de Tecnologia da Informação (STI) & Setores da SEDUC  
 **Organização:** Secretaria de Estado da Educação do Maranhão (SEDUC-MA)  
-**Papel:** Análise de Negócios e Governança de TI  
+**Papel:** Análise de Negócios e Governança Corporativa  
 
 ---
 
 ## 1. Visão de Negócio e Objetivos Estratégicos
 
 ### 1.1 Contexto e Justificativa
-A Superintendência de Tecnologia da Informação (STI) da SEDUC-MA gerencia contratações, locações e aquisições complexas (ex.: equipamentos de informática, links de internet, licenças de software, suporte educacional). 
+A Superintendência de Tecnologia da Informação (STI) e as demais secretarias adjuntas da SEDUC-MA gerenciam contratações, pagamentos, cotações e aquisições complexas (ex.: equipamentos de informática, links de fibra óptica, conectividade de escolas, licenças educacionais, materiais didáticos e infraestrutura escolar). 
 
-Historicamente, cada projeto estratégico necessita tramitar em múltiplos processos administrativos complementares e em plataformas governamentais distintas:
-* **SEI (Sistema Eletrônico de Informações)**: Usado para tramitação de processos administrativos gerais, despachos jurídicos, pareceres da Assessoria Técnica (ASTEC) e deliberações de gabinete.
-* **STARTGOV**: Usado na fase preparatória, licitatória e de cotações de preços (SUMES, CSL, etc.).
+Historicamente, cada demanda estratégica tramita em múltiplos processos administrativos complementares e em plataformas governamentais distintas:
+* **SEI (Sistema Eletrônico de Informações)**: Usado para tramitação de processos administrativos gerais, termos de referência, despachos jurídicos (ASJUR), pareceres orçamentários (SAOFC) e deliberações de gabinete (GAB).
+* **STARTGOV**: Usado na fase preparatória, licitatória e de cotações de preços (SUMES, CPL, etc.).
 
-Antes da implantação deste sistema, o acompanhamento ocorria por planilhas manuais desconectadas, resultando em:
-1. Perda de visibilidade sobre onde os processos estavam parados;
-2. Dificuldade de relacionar múltiplos processos que pertencem a um mesmo projeto/contrato;
-3. Atrasos operacionais graves por desconhecimento do tempo de retenção nos setores externos;
-4. Falta de relatórios executivos diários nos horários de tomada de decisão.
+Com a evolução para a **Versão 3.0**, o sistema passa a atender de forma federada todos os **Setores da SEDUC**, garantindo que equipes setoriais monitorem os seus respectivos processos de interesse com isolamento e segurança, enquanto o perfil **Administrador** possui visão panorâmica e integrada de todas as iniciativas da pasta.
 
-### 1.2 Objetivo Principal
-Prover uma plataforma unificada que vincule múltiplos processos a uma entidade **Projeto única**, monitore automaticamente seus andamentos em tempo real e forneça alertas de retenção para garantir agilidade nas contratações públicas de TI.
+### 1.2 Objetivos Principais
+1. Prover uma plataforma unificada que vincule múltiplos processos a uma entidade **Projeto única** com classificação por setor e etiqueta de demanda (`Contratos` ou `Pagamentos`).
+2. Eliminar o trabalho manual de preenchimento de campos redundantes de trâmites (local, data, situação), delegando a coleta integralmente aos robôs de automação do SEI e StartGov.
+3. Disponibilizar governança multi-setorial com controle de acessos por perfil (`admin`, `operador`, `leitor`).
+4. Centralizar a gestão de canais de disparo, portais e auditoria em um único painel administrativo.
+5. Manter alertas preventivos de retenção de processos e resumos executivos diários nos horários de tomada de decisão (08h, 12h e 16h).
 
 ---
 
 ## 2. Modelo Conceitual de Dados
 
-O modelo de negócio foi estruturado estritamente em torno da relação hierárquica **Projeto (Pai) -> Processos (Filhos) -> Histórico de Status (Linha do Tempo)**.
+O modelo de negócio estrutura-se em torno de 5 entidades centrais com relacionamentos relacionais e integridade referencial:
 
 ```mermaid
 erDiagram
+    SETOR ||--o{ PROJETO : "gerencia (1:N)"
+    SETOR ||--o{ USUARIO : "aloca (1:N)"
     PROJETO ||--o{ PROCESSO : "agrega (1:N)"
     PROCESSO ||--o{ HISTORICO_STATUS : "registra (1:N)"
-    RELATORIO_GERADO }o--|| PROCESSO : "audita consolidado"
+    USUARIO ||--o{ AUDITORIA_LOG : "executa (1:N)"
+    CONFIGURACAO_SISTEMA ||--|| CANAIS_DISPARO : "persiste"
+
+    SETOR {
+        int id PK "Identificador Único"
+        string sigla UK "Sigla do Setor (ex: STI, SAOFC)"
+        string nome "Nome por extenso"
+        int ativo "1=Ativo, 0=Inativo"
+        datetime criado_em "Data de Inclusão"
+    }
 
     PROJETO {
         int id PK "Identificador Único"
         string nome UK "Nome do Projeto (Ex: DUARTE JR)"
         string descricao "Objeto/Finalidade Compartilhada"
+        string etiqueta "Contratos ou Pagamentos"
+        string setor_sigla FK "Setor Responsável (SEDUC)"
         datetime criado_em "Data de Criação"
     }
 
@@ -70,158 +83,103 @@ erDiagram
         string observacao "Identificação do Usuário ou Portal"
     }
 
-    RELATORIO_GERADO {
+    USUARIO {
         int id PK "Identificador Único"
-        datetime data_hora "Momento da Emissão"
-        string tipo "Agendado 08h/12h/16h ou Manual"
-        int total_processos "Total de Processos Monitorados"
-        string destinatarios "Destinos (E-mail / Webhook)"
-        string status "Sucesso ou Falha"
-        text conteudo "HTML/Texto Consolidado"
+        string nome "Nome Completo"
+        string usuario UK "Login de Acesso"
+        string perfil "admin, operador ou leitor"
+        string setor_sigla FK "Setor da SEDUC Vinculado"
+        int ativo "1=Ativo, 0=Bloqueado"
+    }
+
+    AUDITORIA_LOG {
+        int id PK "Identificador Único"
+        string usuario "Identificação do Operador"
+        string acao "Operação Executada"
+        string detalhes "Metadados da Ação"
+        string ip "Endereço IP"
+        datetime criado_em "Timestamp"
     }
 ```
 
 ---
 
-## 3. Mapeamento dos Fluxos de Valor do Negócio
-
-### 3.1 Fluxo de Cadastro e Agregação de Projetos
-```mermaid
-flowchart TD
-    Inicio([Início: Novo Cadastro]) --> VerificaExistencia{Projeto Já Existe?}
-    VerificaExistencia -- Sim --> ReutilizaProjeto[Reutiliza Projeto Existente]
-    VerificaExistencia -- Não --> CriaNovoProjeto[Cria Novo Projeto Único]
-    ReutilizaProjeto --> PreencheProcesso[Preenche Dados do Processo: SEI ou STARTGOV]
-    CriaNovoProjeto --> PreencheProcesso
-    PreencheProcesso --> ValidaNumProcesso{Número Já Cadastrado?}
-    ValidaNumProcesso -- Sim --> ErroDuplicidade[Erro: Número de Processo Duplicado]
-    ValidaNumProcesso -- Não --> SalvaProcesso[Salva Processo Vinculado ao Projeto]
-    SalvaProcesso --> NormalizaData[Normaliza Data para DD/MM/AAAA]
-    NormalizaData --> Fim([Processo Vinculado ao Projeto com Sucesso])
-```
-
-### 3.2 Fluxo de Ciclo de Monitoramento e Alertas
-```mermaid
-flowchart TD
-    Trigger([Horário de Disparo: 08:00, 12:00 ou 16:00]) --> CarregaAtivos[Carrega Processos com monitorar = 1]
-    CarregaAtivos --> LoopProcessos[Para Cada Processo Ativo]
-    
-    LoopProcessos --> Sistema{Qual o Sistema?}
-    Sistema -- SEI --> ScrapSEI[Navega no SEI via SIP -> Pesquisa -> 4 Últimas Linhas]
-    Sistema -- STARTGOV --> ApiStart[Consulta API StartGov -> Extrai Dados e 4 Movimentações]
-    
-    ScrapSEI --> AtualizaDados[Atualiza Local, Ação, Situação e Data de Entrada]
-    ApiStart --> AtualizaDados
-    
-    AtualizaDados --> CalculaDias[Calcula Dias no Setor: Hoje - Data Recebimento]
-    CalculaDias --> ClassificaCrit{Classificação de Dias}
-    ClassificaCrit -- <= 30 dias --> Normal[Verde: Tramitação Regular]
-    ClassificaCrit -- 31 a 60 dias --> Atencao[Amarelo: Ponto de Atenção]
-    ClassificaCrit -- > 60 dias --> AlertaCritico[Vermelho: Alerta Crítico de Retenção]
-    
-    Normal --> Consolida[Consolida Resumo Agrupado por Projeto]
-    Atencao --> Consolida
-    AlertaCritico --> Consolida
-    
-    Consolida --> DisparaCanais[Dispara E-mail HTML e Webhook Corporativo]
-    DisparaCanais --> FimLoop([Resumo Concluído e Registrado em Auditoria])
-```
-
----
-
-## 4. Catálogo Detalhado de Regras de Negócio (RN)
+## 3. Catálogo Detalhado de Regras de Negócio (RN)
 
 ### RN-01: Unicidade do Projeto e Compartilhamento de Objeto
 * **Descrição**: O Projeto é a entidade agregadora máxima. Não deve haver duplicação de nomes de projetos no sistema.
-* **Validação**: Se o usuário cadastrar um processo com um nome de projeto já existente (ex.: `DUARTE JR`), o sistema **obrigatoriamente reutiliza o projeto existente**, vinculando o novo processo a ele e herdando/mantendo a descrição/objeto contratual.
-* **Critério de Aceite**: A tabela visual não exibe linhas repetidas para o mesmo projeto; ela consolida as células com o nome do projeto mesclado verticalmente e os processos subordinados.
+* **Validação**: Se o usuário tentar cadastrar um processo com o nome de um projeto já existente, o sistema reutiliza o projeto existente, vinculando o novo processo a ele e preservando descrição, setor e etiqueta.
 
 ### RN-02: Cardinalidade e Vinculação de Múltiplos Processos (1:N)
-* **Descrição**: Um mesmo Projeto pode conter múltiplos processos vinculados, sem limite preestabelecido.
-* **Cenário Real**: Um projeto pode conter 2 processos do SEI (ex.: processo de pagamento e processo do termo de referência) e 1 processo do STARTGOV (cotação de compras).
-* **Exclusão em Cascata**: A exclusão de um projeto acarreta a exclusão de todos os processos e históricos vinculados a ele. A exclusão de um processo individual não afeta o projeto nem os demais processos irmãos.
+* **Descrição**: Um mesmo Projeto pode conter múltiplos processos vinculados (SEI e/ou StartGov).
+* **Exclusão em Cascata**: A exclusão de um projeto acarreta a exclusão em cascata de todos os processos e históricos subordinados. A exclusão de um processo individual não afeta o projeto nem processos irmãos.
 
 ### RN-03: Compatibilidade de Sistemas Administrativos
 * **Descrição**: O sistema suporta nativamente duas origens de dados:
   1. **SEI**: Processos eletrônicos da Administração Direta do Maranhão.
   2. **STARTGOV**: Processos de compras e licitações.
-* **Validação**: O campo `sistema` é obrigatório e restrito aos valores pré-definidos (`SEI` ou `STARTGOV`).
 
 ### RN-04: Cálculo Oficial de Prazos ("Dias no Setor")
-* **Descrição**: Mede o tempo decorrido desde a chegada do processo à unidade atual até o dia de hoje.
+* **Descrição**: Mede o tempo decorrido desde a data de entrada do processo na unidade atual até o dia de hoje.
 * **Fórmula de Negócio**:
   $$\text{Dias no Setor} = \max\left(0, \text{Data Atual} - \text{Data de Recebimento}\right)$$
-* **Regra de Apuração**:
-  - Apenas as datas em si são computadas (dias corridos inteiros).
-  - Se a data de recebimento não for informada ou for futura, o valor é nulo (`-`) ou zero.
 
 ### RN-05: Classificação de Criticidade e Indicadores de Alerta Visual
-* **Descrição**: Classifica o processo de acordo com o tempo de permanência no mesmo setor para subsidiar cobranças da chefia da STI.
 * **Faixas de Criticidade**:
-  | Faixa de Dias | Classificação | Cor na GUI / E-mail | Ação Recomendada |
+  | Faixa de Dias | Classificação | Cor na UI / E-mail | Ação Recomendada |
   | :--- | :--- | :--- | :--- |
-  | **0 a 30 dias** | Regular / Normal | Verde (`#10b981`) | Tramitação dentro do fluxo esperado. |
-  | **31 a 60 dias** | Atenção | Amarelo / Âmbar (`#f59e0b`) | Solicitar prioridade à unidade responsável. |
-  | **Acima de 60 dias** | **Alerta Crítico** | **Vermelho (`#ef4444`)** | Notificar gestores imediatamente (gargalo crítico). |
+  | **0 a 30 dias** | Regular / Normal | Verde (`#10b981`) | Tramitação regular esperada. |
+  | **31 a 60 dias** | Atenção | Amarelo (`#f59e0b`) | Solicitar prioridade à unidade responsável. |
+  | **Acima de 60 dias** | **Alerta Crítico** | **Vermelho (`#ef4444`)** | Notificar gestores imediatamente (gargalo). |
 
 ### RN-06: Regra dos 4 Últimos Status (Linha do Tempo Recente)
-* **Descrição**: Para evitar sobrecarga de informação nos relatórios executivos, o sistema restringe o histórico a **exatamente as 4 movimentações mais recentes**.
-* **Ordenação**:
-  - Ordem cronológica decrescente rigorosa (da mais nova para a mais antiga).
-  - **Linha 1**: Movimentação mais recente (identificada visualmente como `Posição Atual`).
-  - **Linhas 2, 3 e 4**: Movimentações anteriores imediatas.
-* **Conteúdo Mínimo Obrigatório**: Data/Hora da movimentação (`DD/MM/AAAA HH:MM`), Unidade/Setor, Descrição/Despacho e Identificação do Usuário/Portal.
+* **Descrição**: Para evitar sobrecarga de informação nos relatórios executivos, o sistema restringe o histórico a **exatamente as 4 movimentações mais recentes** em ordem cronológica decrescente.
 
 ### RN-07: Padrão Oficial de Datas (DD/MM/AAAA)
-* **Descrição**: Todas as datas apresentadas ou exportadas pelo sistema devem aderir estritamente ao formato brasileiro oficial: **dia/mês/ano** (`DD/MM/AAAA`) e **dia/mês/ano hora:minuto** (`DD/MM/AAAA HH:MM`).
-* **Tratamento de Entrada**: Se o usuário ou robô fornecer datas em formato ISO (`AAAA-MM-DD`), o sistema deve convertê-las automaticamente antes de persistir e renderizar.
-* **Exceções**: Em caso de data vazia ou não preenchida, o sistema deve apresentar `-` de forma amigável.
+* **Descrição**: Todas as datas apresentadas ou exportadas pelo sistema devem aderir rigorosamente ao formato brasileiro: **dia/mês/ano** (`DD/MM/AAAA`) e **dia/mês/ano hora:minuto** (`DD/MM/AAAA HH:MM`).
 
 ### RN-08: Ciclo Triplo de Notificação (08h, 12h e 16h)
-* **Descrição**: Os resumos executivos devem ser gerados e despachados pontualmente nos horários de tomada de decisão:
-  - **08:00**: Abertura do expediente (planejamento das cobranças do dia).
-  - **12:00**: Fechamento do turno matutino (acompanhamento de andamentos da manhã).
-  - **16:00**: Fechamento do expediente vespertino (balanço de fim de dia).
-* **Condição de Disparo**: O agendador só executa uma vez por hora cheia (evitando disparos duplicados).
+* **Descrição**: Os resumos executivos são gerados e despachados pontualmente nos horários de tomada de decisão:
+  - **08:00**: Início do expediente (planejamento das cobranças matutinas).
+  - **12:00**: Fechamento do turno matutino.
+  - **16:00**: Fechamento do expediente vespertino.
 
 ### RN-09: Segregação de Monitoramento Ativo (`monitorar = 1`)
-* **Descrição**: Processos podem ser desativados do monitoramento automático sem serem excluídos do histórico do projeto.
-* **Comportamento**:
-  - `monitorar = 1`: O processo é consultado nos portais pelos robôs e figura nos e-mails e relatórios diários.
-  - `monitorar = 0`: O processo fica arquivado/pausado para consultas e emissão de resumos, mas permanece visível na tela quando o filtro `"Todos os Processos"` estiver ativo.
+* **Descrição**: Processos podem ser desativados temporariamente do monitoramento sem exclusão de dados (`monitorar = 0`). Processos pausados não são consultados pelos robôs nem entram nos resumos disparados.
 
-### RN-10: Tratamento de Exceções de Negócio & Contingência nos Portais
-* **Descrição**: Caso o SEI ou STARTGOV apresentem instabilidade, timeout ou captcha:
-  1. O sistema **não aborta** a rotina geral de monitoramento.
-  2. Mantém os dados da última posição conhecida com sucesso.
-  3. Registra na barra de status e nos logs o motivo da falha transitória (ex.: `"Falha ao consultar: Timeout de conexão"`).
-  4. O próximo ciclo agendado tentará a consulta novamente de forma autônoma.
+### RN-10: Tratamento de Exceções & Resiliência nos Portais
+* **Descrição**: Caso o SEI ou STARTGOV apresentem instabilidade, o sistema não aborta o monitoramento geral. Ele preserva os dados da última posição conhecida com sucesso e registra a advertência para tentativa no próximo ciclo.
 
-### RN-11: Deep-Linking e Agilidade Operacional via Área de Transferência (v2.0)
-* **Descrição**: O analista deve conseguir saltar diretamente da tela de gestão para os autos oficiais no portal de origem.
-* **Regras de Interação**:
-  - **Clique com Botão Esquerdo no Nº do Processo**:
-    1. O número é copiado imediatamente para a Área de Transferência do sistema operacional (`Clipboard`).
-    2. O navegador padrão é aberto diretamente no portal oficial do processo.
-    3. Para processos do StartGov, a busca é preenchida automaticamente via URL.
-    4. Para processos do SEI, a tela de controle/login é aberta, permitindo que o usuário dê `Ctrl + V` imediatamente.
-  - **Clique com Botão Direito no Nº do Processo**:
-    - Abre menu de contexto com opções de cópia simples, abertura de consulta pública ou detalhamento do histórico interno.
+### RN-11: Deep-Linking e Agilidade Operacional via Área de Transferência
+* **Descrição**: Clicar sobre o número do processo abre o portal oficial no navegador padrão e copia automaticamente o número oficial para a Área de Transferência (`Clipboard`), agilizando consultas.
 
----
+### RN-12: Governança Multi-Setorial e Perfil de Visualização (v3.0)
+* **Descrição**: Projetos são obrigatoriamente vinculados a um setor da SEDUC (`STI`, `SAOFC`, `ASJUR`, `GAB`, `CPL`, etc.).
+* **Regras de Visualização**:
+  1. Usuários com perfil **`operador`** ou **`leitor`** visualizam apenas os projetos pertencentes ao seu setor de cadastro.
+  2. Usuários com perfil **`admin`** têm acesso corporativo unificado e visualizam todos os projetos de todos os setores da SEDUC.
+* **Segurança**: Tentativas de acesso ou manipulação de projetos de outros setores por usuários não administradores são rejeitadas com código HTTP `403 Forbidden`.
 
-## 5. Matriz de Rastreabilidade: Regra de Negócio vs. Implementação Técnica
+### RN-13: Categorização por Etiqueta de Projeto (v3.0)
+* **Descrição**: Todo projeto deve possuir uma etiqueta que tipifica a natureza de sua execução:
+  - **`1 - Contratos`**: Demandas de fornecimento contínuo, licitações, termos de parceria ou locação de bens e serviços.
+  - **`2 - Pagamentos`**: Processos de liquidação de despesa, atesto de notas fiscais e empenho.
+* **Aplicação**: A etiqueta é exibida em badges distintas na grid principal, filtros da barra superior e em todos os relatórios gerados pelo sistema.
 
-| Regra de Negócio | Módulo Técnico Responsável | Componente / Função Principal |
-| :--- | :--- | :--- |
-| **RN-01 (Unicidade de Projeto)** | `database.py` | `obter_ou_criar_projeto()` |
-| **RN-02 (Relação 1:N & Cascata)** | `database.py` | `CREATE TABLE processos ... ON DELETE CASCADE` |
-| **RN-03 (SEI / STARTGOV)** | `integrations/` | `sei_integration.py` e `startgov_integration.py` |
-| **RN-04 (Dias no Setor)** | `database.py` | `calcular_dias_no_setor()` |
-| **RN-05 (Criticidade e Cores)** | `app_gui.py` / `notifier.py` | Lógica de badge de criticidade (`>60 dias = Vermelho`) |
-| **RN-06 (4 Últimos Status)** | `database.py` | `salvar_historico_4_status()` com `ORDER BY id DESC LIMIT 4` |
-| **RN-07 (Datas DD/MM/AAAA)** | `database.py` | `formatar_data_br()` e `formatar_data_hora_br()` |
-| **RN-08 (Horários 08h, 12h, 16h)** | `scheduler.py` | `RelatorioScheduler._run_loop()` |
-| **RN-09 (Filtro de Monitoramento)**| `app_gui.py` / `database.py` | Query com parâmetro `apenas_monitorados=True` |
-| **RN-10 (Resiliência a Falhas)** | `monitor_engine.py` | Bloco `try/except` individualizado por processo |
-| **RN-11 (Deep-Link e Clipboard)** | `app_gui.py` / `static/js/app.js` | `abrir_processo_direto()` e `clipboard_append` |
+### RN-14: Cadastro Simplificado e Captação Automatizada de Metadados (v3.0)
+* **Descrição**: Na tela de inclusão de novos processos, é dispensado o preenchimento manual dos campos *Local/Setor Atual*, *Data de Recebimento*, *Situação* e *Ação Imediata*.
+* **Comportamento do Robô**:
+  1. O usuário informa apenas o Projeto e o número do processo (**SEI** e/ou **STARTGOV**).
+  2. O sistema aciona os conectores dos portais oficiais, captura imediatamente a tramitação atual e preenche os metadados diretamente no banco de dados.
+
+### RN-15: Gestão Administrativa Centralizada e Trilha de Auditoria (v3.0)
+* **Descrição**: A administração do sistema é centralizada no Painel Administrativo estruturado em 5 pilares:
+  1. *Cadastro e Gestão de Usuários*;
+  2. *Setores da SEDUC*;
+  3. *Canais de Disparo (E-mail SMTP & Webhook)*;
+  4. *Portais Oficiais & Robôs*;
+  5. *Trilha de Auditoria*.
+* **Imutabilidade**: Toda ação de criação, alteração ou exclusão de dados administrativos é registrada na tabela `auditoria_logs` com usuário, ação, detalhes, IP e data/hora.
+
+### RN-16: Configuração Dinâmica dos Canais de Disparo (v3.0)
+* **Descrição**: As configurações de envio de relatórios (servidor SMTP, porta, credenciais, e-mails de destino e webhook) podem ser mantidas diretamente pela interface gráfica, persistidas no banco (`configuracoes_sistema`) com prioridade sobre as variáveis do arquivo `.env` e testadas em tempo real com o botão *Testar Disparo*.
