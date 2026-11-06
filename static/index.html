@@ -50,9 +50,6 @@
         <button class="btn btn-secondary" id="btnHeaderSincronizar" onclick="sincronizarSistemasWeb()" title="Consultar portais oficiais">
           <span class="icon">🔄</span> Sincronizar
         </button>
-        <button class="btn btn-outline" onclick="abrirModalSistemas()">
-          <span class="icon">🔑</span> Portais
-        </button>
 
         <!-- Menu Administrativo com Destaque e Dropdown -->
         <div class="dropdown-admin" id="menuAdminContainer" style="display: none;">
@@ -94,11 +91,11 @@
               </div>
             </a>
             <div style="border-top: 1px solid #f1f5f9; margin: 4px 0;"></div>
-            <a href="javascript:void(0)" onclick="fecharDropdownAdmin(); abrirModalSistemas();" class="dropdown-admin-item">
+            <a href="javascript:void(0)" onclick="fecharDropdownAdmin(); abrirModalUsuarios('portais');" class="dropdown-admin-item">
               <span class="item-icon">🔑</span>
               <div>
                 <span class="item-title">Portais SEI & StartGov</span>
-                <span class="item-desc">Credenciais e status de conexão</span>
+                <span class="item-desc">Status, credenciais e testes dos robôs</span>
               </div>
             </a>
           </div>
@@ -465,11 +462,6 @@
       </form>
     </div>
   </div>
-          <button type="submit" class="btn btn-primary">Atualizar Projeto</button>
-        </div>
-      </form>
-    </div>
-  </div>
 
   <!-- MODAL: HISTÓRICO COMPLETO DO PROCESSO -->
   <div class="modal-overlay" id="modalHistorico">
@@ -738,6 +730,9 @@
         <button type="button" id="tabBtnCanais" class="view-btn" style="border-radius: 0; padding: 12px 16px; font-weight: 600;" onclick="alternarAbaUsuarios('canais')">
           📡 Canais de Disparo (E-mail & Webhook)
         </button>
+        <button type="button" id="tabBtnPortais" class="view-btn" style="border-radius: 0; padding: 12px 16px; font-weight: 600;" onclick="alternarAbaUsuarios('portais')">
+          🔑 Portais Oficiais & Robôs
+        </button>
         <button type="button" id="tabBtnAuditoria" class="view-btn" style="border-radius: 0; padding: 12px 16px; font-weight: 600;" onclick="alternarAbaUsuarios('auditoria')">
           📜 Trilha de Auditoria
         </button>
@@ -989,6 +984,51 @@
               </button>
             </div>
           </form>
+        </div>
+
+        <!-- ABA 5: PORTAIS OFICIAIS & ROBÔS -->
+        <div id="abaConteudoPortais" style="display: none;">
+          <div class="sistemas-cards">
+            <!-- CARD SEI -->
+            <div class="sistema-box">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div class="sistema-badge-yellow" style="margin-bottom: 0;">SEI - Governo do Maranhão</div>
+                <span id="badgeStatusSEIAdmin" style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: #fef3c7; color: #92400e;">Carregando...</span>
+              </div>
+              <p style="font-size: 12px; color: #475569; margin-bottom: 8px;"><strong>Usuário Configurado:</strong> <code id="txtUserSEIAdmin">...</code></p>
+              <p style="font-size: 12px; color: #475569; margin-bottom: 12px;" id="msgDiagSEIAdmin">Pronto para consulta automática com credenciais do órgão.</p>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <a href="https://sip.sei.ma.gov.br/sip/login.php?sigla_orgao_sistema=GOVMA&sigla_sistema=SEI&infra_url=L3NlaS8=" target="_blank" class="btn btn-sm btn-outline">
+                  Acessar Portal SEI ↗
+                </a>
+              </div>
+            </div>
+
+            <!-- CARD STARTGOV -->
+            <div class="sistema-box">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div class="sistema-badge-blue" style="margin-bottom: 0;">STARTGOV - Compras & Licitações</div>
+                <span id="badgeStatusStartGovAdmin" style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: #e0f2fe; color: #0369a1;">Carregando...</span>
+              </div>
+              <p style="font-size: 12px; color: #475569; margin-bottom: 8px;"><strong>Usuário Configurado:</strong> <code id="txtUserStartGovAdmin">...</code></p>
+              <p style="font-size: 12px; color: #475569; margin-bottom: 12px;" id="msgDiagStartGovAdmin">Pronto para consulta e rastreio de processos licitatórios.</p>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <a href="https://bid.startgov.com.br/login" target="_blank" class="btn btn-sm btn-outline">
+                  Acessar Portal STARTGOV ↗
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top: 18px; padding: 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+            <div>
+              <strong style="font-size: 13px; color: #0f172a;">Diagnóstico de Conectividade dos Robôs</strong>
+              <p style="font-size: 12px; color: #64748b; margin-top: 2px;">Testa autenticação direta com os servidores do SEI e StartGov.</p>
+            </div>
+            <button type="button" class="btn btn-primary" id="btnTestarPortaisAdmin" onclick="testarConectividadeRobos()">
+              <span class="icon">⚡</span> Testar Conexão dos Robôs
+            </button>
+          </div>
         </div>
       </div>
 

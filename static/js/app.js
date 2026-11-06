@@ -1424,8 +1424,7 @@ async function excluirProjetoAtual() {
 // SISTEMAS E EXPORTAÇÃO
 // -------------------------------------------------------------
 async function abrirModalSistemas() {
-  document.getElementById("modalSistemas").style.display = "flex";
-  await carregarStatusSistemas();
+  abrirModalUsuarios("portais");
 }
 
 async function carregarStatusSistemas() {
@@ -1436,37 +1435,47 @@ async function carregarStatusSistemas() {
       const sei = json.data.sei || {};
       const start = json.data.startgov || {};
 
-      const bSei = document.getElementById("badgeStatusSEI");
-      const uSei = document.getElementById("txtUserSEI");
-      if (bSei && uSei) {
+      const bSeiList = [document.getElementById("badgeStatusSEI"), document.getElementById("badgeStatusSEIAdmin")].filter(Boolean);
+      const uSeiList = [document.getElementById("txtUserSEI"), document.getElementById("txtUserSEIAdmin")].filter(Boolean);
+      bSeiList.forEach(bSei => {
         if (sei.configurado) {
           bSei.textContent = "✓ Configurado";
           bSei.style.background = "#dcfce7";
           bSei.style.color = "#15803d";
-          uSei.textContent = sei.usuario ? sei.usuario.replace(/(.{2}).*(.{2})/, "$1***$2") : "Configurado via ambiente";
         } else {
           bSei.textContent = "⚠️ Não Configurado";
           bSei.style.background = "#fee2e2";
           bSei.style.color = "#b91c1c";
+        }
+      });
+      uSeiList.forEach(uSei => {
+        if (sei.configurado) {
+          uSei.textContent = sei.usuario ? sei.usuario.replace(/(.{2}).*(.{2})/, "$1***$2") : "Configurado via ambiente";
+        } else {
           uSei.textContent = "Variáveis SEI_USER/SEI_PASS ausentes";
         }
-      }
+      });
 
-      const bStart = document.getElementById("badgeStatusStartGov");
-      const uStart = document.getElementById("txtUserStartGov");
-      if (bStart && uStart) {
+      const bStartList = [document.getElementById("badgeStatusStartGov"), document.getElementById("badgeStatusStartGovAdmin")].filter(Boolean);
+      const uStartList = [document.getElementById("txtUserStartGov"), document.getElementById("txtUserStartGovAdmin")].filter(Boolean);
+      bStartList.forEach(bStart => {
         if (start.configurado) {
           bStart.textContent = "✓ Configurado";
           bStart.style.background = "#dcfce7";
           bStart.style.color = "#15803d";
-          uStart.textContent = start.usuario ? start.usuario.replace(/(\d{3})\d{6}(\d{2})/, "$1.***.***-$2") : "Configurado via ambiente";
         } else {
           bStart.textContent = "⚠️ Não Configurado";
           bStart.style.background = "#fee2e2";
           bStart.style.color = "#b91c1c";
+        }
+      });
+      uStartList.forEach(uStart => {
+        if (start.configurado) {
+          uStart.textContent = start.usuario ? start.usuario.replace(/(\d{3})\d{6}(\d{2})/, "$1.***.***-$2") : "Configurado via ambiente";
+        } else {
           uStart.textContent = "Variáveis STARTGOV_USER/STARTGOV_PASS ausentes";
         }
-      }
+      });
     }
   } catch (err) {
     console.error("Erro ao obter status dos sistemas:", err);
@@ -1474,10 +1483,12 @@ async function carregarStatusSistemas() {
 }
 
 async function testarConectividadeRobos() {
-  const btn = document.getElementById("btnTestarPortais");
-  const origHtml = btn.innerHTML;
-  btn.innerHTML = '<span class="icon-sync-spin">🔄</span> Testando autenticação...';
-  btn.disabled = true;
+  const btns = [document.getElementById("btnTestarPortais"), document.getElementById("btnTestarPortaisAdmin")].filter(Boolean);
+  const origHtmls = btns.map(b => b.innerHTML);
+  btns.forEach(b => {
+    b.innerHTML = '<span class="icon-sync-spin">🔄</span> Testando autenticação...';
+    b.disabled = true;
+  });
 
   try {
     const res = await fetch("/api/sistemas/testar", { method: "POST" });
@@ -1486,37 +1497,47 @@ async function testarConectividadeRobos() {
       const sei = json.data.sei || {};
       const start = json.data.startgov || {};
 
-      const bSei = document.getElementById("badgeStatusSEI");
-      const mSei = document.getElementById("msgDiagSEI");
-      if (bSei && mSei) {
+      const bSeiList = [document.getElementById("badgeStatusSEI"), document.getElementById("badgeStatusSEIAdmin")].filter(Boolean);
+      const mSeiList = [document.getElementById("msgDiagSEI"), document.getElementById("msgDiagSEIAdmin")].filter(Boolean);
+      bSeiList.forEach(bSei => {
         if (sei.sucesso) {
           bSei.textContent = "🟢 Autenticado (OK)";
           bSei.style.background = "#dcfce7";
           bSei.style.color = "#15803d";
-          mSei.innerHTML = `<span style="color: #15803d; font-weight: 600;">✓ Conexão bem-sucedida: ${escapeHtml(sei.mensagem)}</span>`;
         } else {
           bSei.textContent = "🔴 Falha no Login";
           bSei.style.background = "#fee2e2";
           bSei.style.color = "#b91c1c";
+        }
+      });
+      mSeiList.forEach(mSei => {
+        if (sei.sucesso) {
+          mSei.innerHTML = `<span style="color: #15803d; font-weight: 600;">✓ Conexão bem-sucedida: ${escapeHtml(sei.mensagem)}</span>`;
+        } else {
           mSei.innerHTML = `<span style="color: #b91c1c;">⚠️ ${escapeHtml(sei.mensagem)}</span>`;
         }
-      }
+      });
 
-      const bStart = document.getElementById("badgeStatusStartGov");
-      const mStart = document.getElementById("msgDiagStartGov");
-      if (bStart && mStart) {
+      const bStartList = [document.getElementById("badgeStatusStartGov"), document.getElementById("badgeStatusStartGovAdmin")].filter(Boolean);
+      const mStartList = [document.getElementById("msgDiagStartGov"), document.getElementById("msgDiagStartGovAdmin")].filter(Boolean);
+      bStartList.forEach(bStart => {
         if (start.sucesso) {
           bStart.textContent = "🟢 Autenticado (OK)";
           bStart.style.background = "#dcfce7";
           bStart.style.color = "#15803d";
-          mStart.innerHTML = `<span style="color: #15803d; font-weight: 600;">✓ Conexão bem-sucedida: ${escapeHtml(start.mensagem)}</span>`;
         } else {
           bStart.textContent = "🔴 Falha no Login";
           bStart.style.background = "#fee2e2";
           bStart.style.color = "#b91c1c";
+        }
+      });
+      mStartList.forEach(mStart => {
+        if (start.sucesso) {
+          mStart.innerHTML = `<span style="color: #15803d; font-weight: 600;">✓ Conexão bem-sucedida: ${escapeHtml(start.mensagem)}</span>`;
+        } else {
           mStart.innerHTML = `<span style="color: #b91c1c;">⚠️ ${escapeHtml(start.mensagem)}</span>`;
         }
-      }
+      });
 
       showToast("✓ Teste de conexão concluído!", "sucesso");
     } else {
@@ -1526,8 +1547,10 @@ async function testarConectividadeRobos() {
     console.error(err);
     showToast("Falha de conexão com o servidor ao testar robôs.", "erro");
   } finally {
-    btn.innerHTML = origHtml;
-    btn.disabled = false;
+    btns.forEach((b, idx) => {
+      b.innerHTML = origHtmls[idx] || "Testar Conexão dos Robôs";
+      b.disabled = false;
+    });
   }
 }
 
@@ -1885,14 +1908,16 @@ function alternarAbaUsuarios(aba) {
   const btnU = document.getElementById("tabBtnUsuarios");
   const btnS = document.getElementById("tabBtnSetores");
   const btnC = document.getElementById("tabBtnCanais");
+  const btnP = document.getElementById("tabBtnPortais");
   const btnA = document.getElementById("tabBtnAuditoria");
   const abaU = document.getElementById("abaConteudoUsuarios");
   const abaS = document.getElementById("abaConteudoSetores");
   const abaC = document.getElementById("abaConteudoCanais");
+  const abaP = document.getElementById("abaConteudoPortais");
   const abaA = document.getElementById("abaConteudoAuditoria");
 
   // Reset tabs
-  [btnU, btnS, btnC, btnA].forEach(b => {
+  [btnU, btnS, btnC, btnP, btnA].forEach(b => {
     if (b) {
       b.className = "view-btn";
       b.style.borderBottom = "none";
@@ -1902,6 +1927,7 @@ function alternarAbaUsuarios(aba) {
   if (abaU) abaU.style.display = "none";
   if (abaS) abaS.style.display = "none";
   if (abaC) abaC.style.display = "none";
+  if (abaP) abaP.style.display = "none";
   if (abaA) abaA.style.display = "none";
 
   if (aba === "usuarios") {
@@ -1928,6 +1954,14 @@ function alternarAbaUsuarios(aba) {
     }
     if (abaC) abaC.style.display = "block";
     carregarConfiguracoesCanais();
+  } else if (aba === "portais") {
+    if (btnP) {
+      btnP.className = "view-btn active";
+      btnP.style.borderBottom = "2px solid #2563eb";
+      btnP.style.fontWeight = "700";
+    }
+    if (abaP) abaP.style.display = "block";
+    carregarStatusSistemas();
   } else {
     if (btnA) {
       btnA.className = "view-btn active";
