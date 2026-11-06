@@ -834,8 +834,6 @@ function abrirModalNovoProcesso() {
   if (tituloEl) tituloEl.textContent = "Cadastrar Novo Processo";
   document.getElementById("formProcesso").reset();
   document.getElementById("formProcId").value = "";
-  const dtEl = document.getElementById("formDataRec");
-  if (dtEl) dtEl.value = new Date().toISOString().split("T")[0];
   const etqEl = document.getElementById("formEtiqueta");
   if (etqEl) etqEl.value = "Contratos";
   const monEl = document.getElementById("formMonitorar");
@@ -859,23 +857,7 @@ async function abrirModalEditarProcesso(procId) {
     document.getElementById("formSistema").value = p.sistema || "SEI";
     document.getElementById("formNumero").value = p.numero_processo || "";
     document.getElementById("formDescricao").value = p.descricao || "";
-    document.getElementById("formLocal").value = p.local_atual || "";
-    document.getElementById("formAcao").value = p.acao || "";
-    document.getElementById("formSituacao").value = p.situacao || "";
-    
-    const dtEl = document.getElementById("formDataRec");
-    if (dtEl) {
-      if (p.data_recebimento) {
-        if (/^\d{2}\/\d{2}\/\d{4}$/.test(p.data_recebimento)) {
-          const [d, m, a] = p.data_recebimento.split("/");
-          dtEl.value = `${a}-${m}-${d}`;
-        } else {
-          dtEl.value = p.data_recebimento;
-        }
-      } else {
-        dtEl.value = "";
-      }
-    }
+
     const monEl = document.getElementById("formMonitorar");
     if (monEl) monEl.checked = (p.monitorar === 1 || p.monitorar === undefined);
 
@@ -898,7 +880,6 @@ async function salvarProcesso(e) {
     return;
   }
 
-  const dtEl = document.getElementById("formDataRec");
   const fEtq = document.getElementById("formEtiqueta");
   const dados = {
     projeto: document.getElementById("formProjeto").value.trim() || "STI",
@@ -906,10 +887,6 @@ async function salvarProcesso(e) {
     sistema: document.getElementById("formSistema").value.trim() || "SEI",
     numero_processo: numProc,
     descricao: document.getElementById("formDescricao").value.trim(),
-    local_atual: document.getElementById("formLocal").value.trim(),
-    acao: document.getElementById("formAcao").value.trim(),
-    situacao: document.getElementById("formSituacao").value.trim(),
-    data_recebimento: dtEl ? dtEl.value : "",
     monitorar: document.getElementById("formMonitorar").checked ? 1 : 0
   };
 

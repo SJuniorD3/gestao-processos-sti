@@ -869,9 +869,9 @@ def criar_processo(dados):
 
         cursor = conn.cursor()
         monitorar_val = 1 if dados.get("monitorar", 1) in (1, "1", True, "true", "True") else 0
-        local_atual = dados.get("local_atual", "").strip() or "Aguardando Monitoramento"
-        situacao = dados.get("situacao", "").strip() or "Cadastrado para monitoramento"
-        acao = dados.get("acao", "").strip() or "Aguardando trâmite"
+        local_atual = dados.get("local_atual", "").strip() or "Aguardando Sincronização"
+        situacao = dados.get("situacao", "").strip() or "Aguardando Robô STI"
+        acao = dados.get("acao", "").strip() or "Sincronização pendente"
         raw_dt = dados.get("data_recebimento", "").strip()
         dt_parsed = parse_date(raw_dt)
         data_recebimento = dt_parsed.strftime("%d/%m/%Y") if dt_parsed else (raw_dt if raw_dt else "")
@@ -901,7 +901,7 @@ def criar_processo(dados):
             local_atual,
             situacao,
             acao,
-            f"Processo vinculado ao projeto {nome_projeto}"
+            f"Processo cadastrado no projeto {nome_projeto}. Aguardando 1ª sincronização automática."
         ))
         conn.commit()
         return proc_id
