@@ -222,12 +222,10 @@ async function carregarUsuarioAtual() {
       if (usuarioLogado.perfil === "leitor") {
         const btnProc = document.getElementById("btnHeaderNovoProcesso");
         const btnProj = document.getElementById("btnHeaderNovoProjeto");
-        const btnEditProj = document.getElementById("btnHeaderEditarProjeto");
         const btnSync = document.getElementById("btnHeaderSincronizar");
         const btnImport = document.getElementById("btnHeaderImportarLote");
         if (btnProc) btnProc.style.display = "none";
         if (btnProj) btnProj.style.display = "none";
-        if (btnEditProj) btnEditProj.style.display = "none";
         if (btnSync) btnSync.style.display = "none";
         if (btnImport) btnImport.style.display = "none";
       }
