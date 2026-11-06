@@ -124,6 +124,7 @@ def executar_ciclo_sincronizacao():
 
             dados_atualizados = {
                 "projeto": proc["projeto"],
+                "etiqueta": proc.get("etiqueta", "Contratos"),
                 "sistema": proc["sistema"],
                 "numero_processo": proc["numero_processo"],
                 "descricao": proc["descricao"],

@@ -285,7 +285,7 @@ function popularSelectProjetos(projetos) {
   const select = document.getElementById("editProjSelect");
   if (select) {
     select.innerHTML = '<option value="">-- Selecione um projeto para editar --</option>' +
-      projetos.map(p => `<option value="${p.id}">${escapeHtml(p.nome)} (${(p.processos || []).length} processos)</option>`).join("");
+      projetos.map(p => `<option value="${p.id}">[${p.etiqueta === 'Pagamentos' ? '💳 Pagamentos' : '📄 Contratos'}] ${escapeHtml(p.nome)} (${(p.processos || []).length} processos)</option>`).join("");
   }
 }
 
@@ -335,10 +335,16 @@ function renderizarTabela(listaProjetos) {
 
     if (totalP === 0) {
       // Projeto sem processos cadastrados ainda
+      const etqVazia = proj.etiqueta === "Pagamentos" ? "Pagamentos" : "Contratos";
+      const badgeVazia = etqVazia === "Pagamentos"
+        ? `<span class="badge-etiqueta badge-pagamentos">💳 Pagamentos</span>`
+        : `<span class="badge-etiqueta badge-contratos">📄 Contratos</span>`;
+
       htmlTotal += `
         <tr>
           <td class="cell-projeto" style="font-weight: 800; color: #1e3a8a;">
-            📁 ${escapeHtml(proj.nome)}
+            ${badgeVazia}
+            <div>📁 ${escapeHtml(proj.nome)}</div>
             <span style="display: block; font-size: 11px; color: #64748b;">(Sem processos)</span>
           </td>
           <td colspan="10" style="color: #64748b; font-size: 12.5px; padding: 12px 14px;">
@@ -366,8 +372,14 @@ function renderizarTabela(listaProjetos) {
       const isLeitor = usuarioLogado && usuarioLogado.perfil === "leitor";
 
       if (idx === 0) {
+        const etq = proj.etiqueta === "Pagamentos" ? "Pagamentos" : "Contratos";
+        const badgeEtq = etq === "Pagamentos"
+          ? `<span class="badge-etiqueta badge-pagamentos">💳 Pagamentos</span>`
+          : `<span class="badge-etiqueta badge-contratos">📄 Contratos</span>`;
+
         celulaProjeto = `
           <td rowspan="${totalP}" class="cell-projeto" style="vertical-align: top; background: white; font-weight: 700; color: #111827;">
+            ${badgeEtq}
             <div style="cursor: pointer;" onclick="${isLeitor ? '' : `abrirModalEditarProjeto(${proj.id})`}" title="${isLeitor ? '' : 'Clique para editar o projeto'}">${escapeHtml(proj.nome)}</div>
             ${!isLeitor ? `
               <div style="margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap;">
@@ -460,12 +472,19 @@ function filtrarTabela() {
   const texto = document.getElementById("filtroTexto").value.toLowerCase().trim();
   const local = document.getElementById("filtroLocal").value;
   const sistema = document.getElementById("filtroSistema").value;
+  const etiquetaFiltro = document.getElementById("filtroEtiqueta") ? document.getElementById("filtroEtiqueta").value : "";
   const diasFiltro = document.getElementById("filtroDias") ? document.getElementById("filtroDias").value : "";
   const monit = document.getElementById("filtroMonitorar") ? document.getElementById("filtroMonitorar").value : "";
 
   const filtrados = [];
 
   todosProjetos.forEach(proj => {
+    // Filtro por Etiqueta (Contratos / Pagamentos)
+    const projEtiqueta = proj.etiqueta || "Contratos";
+    if (etiquetaFiltro && projEtiqueta.toLowerCase() !== etiquetaFiltro.toLowerCase()) {
+      return;
+    }
+
     const procs = (proj.processos || []).filter(p => {
       const matchTexto = !texto || 
         (p.numero_processo && p.numero_processo.toLowerCase().includes(texto)) ||
@@ -509,6 +528,7 @@ function limparFiltrosV3() {
   if (document.getElementById("filtroTexto")) document.getElementById("filtroTexto").value = "";
   if (document.getElementById("filtroLocal")) document.getElementById("filtroLocal").value = "";
   if (document.getElementById("filtroSistema")) document.getElementById("filtroSistema").value = "";
+  if (document.getElementById("filtroEtiqueta")) document.getElementById("filtroEtiqueta").value = "";
   if (document.getElementById("filtroDias")) document.getElementById("filtroDias").value = "";
   if (document.getElementById("filtroMonitorar")) document.getElementById("filtroMonitorar").value = "1";
   filtrarTabela();
@@ -551,12 +571,18 @@ function renderizarTimelineVisual(listaProjetos) {
     // Verifica se algum processo tem alerta crítico
     const temCritico = procs.some(p => (p.dias_no_setor || 0) > 60);
 
+    const etqTimeline = proj.etiqueta === "Pagamentos" ? "Pagamentos" : "Contratos";
+    const badgeEtqTimeline = etqTimeline === "Pagamentos"
+      ? `<span class="badge-etiqueta-timeline badge-pagamentos-timeline">💳 Pagamentos</span>`
+      : `<span class="badge-etiqueta-timeline badge-contratos-timeline">📄 Contratos</span>`;
+
     htmlTotal += `
       <div class="project-card">
         <div class="project-card-header">
           <div>
-            <div class="project-title">
+            <div class="project-title" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
               <span>📁 ${escapeHtml(proj.nome)}</span>
+              ${badgeEtqTimeline}
               <span style="background: rgba(255,255,255,0.15); font-size: 11px; padding: 2px 8px; border-radius: 9999px; font-weight: 500;">
                 ${procs.length} processo(s)
               </span>
@@ -734,11 +760,15 @@ function abrirModalNovoProcessoComProjeto(identificador) {
   if (proj) {
     const fProj = document.getElementById("formProjeto");
     const fDesc = document.getElementById("formDescricao");
+    const fEtq = document.getElementById("formEtiqueta");
     if (fProj) fProj.value = proj.nome || "";
     if (fDesc) fDesc.value = proj.descricao || "";
+    if (fEtq) fEtq.value = proj.etiqueta || "Contratos";
   } else if (typeof identificador === "string") {
     const fProj = document.getElementById("formProjeto");
     if (fProj) fProj.value = identificador;
+    const fEtq = document.getElementById("formEtiqueta");
+    if (fEtq) fEtq.value = "Contratos";
   }
 }
 
@@ -806,6 +836,8 @@ function abrirModalNovoProcesso() {
   document.getElementById("formProcId").value = "";
   const dtEl = document.getElementById("formDataRec");
   if (dtEl) dtEl.value = new Date().toISOString().split("T")[0];
+  const etqEl = document.getElementById("formEtiqueta");
+  if (etqEl) etqEl.value = "Contratos";
   const monEl = document.getElementById("formMonitorar");
   if (monEl) monEl.checked = true;
   document.getElementById("modalProcesso").style.display = "flex";
@@ -822,6 +854,8 @@ async function abrirModalEditarProcesso(procId) {
     if (tituloEl) tituloEl.textContent = "Editar Processo " + (p.numero_processo || "");
     document.getElementById("formProcId").value = p.id;
     document.getElementById("formProjeto").value = p.projeto || "";
+    const etqEl = document.getElementById("formEtiqueta");
+    if (etqEl) etqEl.value = p.etiqueta || "Contratos";
     document.getElementById("formSistema").value = p.sistema || "SEI";
     document.getElementById("formNumero").value = p.numero_processo || "";
     document.getElementById("formDescricao").value = p.descricao || "";
@@ -865,8 +899,10 @@ async function salvarProcesso(e) {
   }
 
   const dtEl = document.getElementById("formDataRec");
+  const fEtq = document.getElementById("formEtiqueta");
   const dados = {
     projeto: document.getElementById("formProjeto").value.trim() || "STI",
+    etiqueta: fEtq ? fEtq.value : "Contratos",
     sistema: document.getElementById("formSistema").value.trim() || "SEI",
     numero_processo: numProc,
     descricao: document.getElementById("formDescricao").value.trim(),
@@ -1207,6 +1243,7 @@ async function salvarNovoProjeto(e) {
   e.preventDefault();
   const nome = document.getElementById("novoProjNome").value.trim();
   const descricao = document.getElementById("novoProjDescricao").value.trim();
+  const etiqueta = document.getElementById("novoProjEtiqueta") ? document.getElementById("novoProjEtiqueta").value : "Contratos";
 
   if (!nome) {
     showToast("O nome do projeto é obrigatório.", "alerta");
@@ -1217,7 +1254,7 @@ async function salvarNovoProjeto(e) {
     const res = await fetch("/api/projetos", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome, descricao })
+      body: JSON.stringify({ nome, descricao, etiqueta })
     });
     const json = await res.json();
     if (json.success) {
@@ -1266,6 +1303,7 @@ function preencherCamposEdicaoProjeto(proj) {
   const idEl = document.getElementById("editProjId");
   const nomeEl = document.getElementById("editProjNome");
   const descEl = document.getElementById("editProjDescricao");
+  const etqEl = document.getElementById("editProjEtiqueta");
   const titleEl = document.getElementById("modalProjetoTitle");
   const infoEl = document.getElementById("editProjProcessosInfo");
   const selEl = document.getElementById("editProjSelect");
@@ -1273,6 +1311,7 @@ function preencherCamposEdicaoProjeto(proj) {
   if (idEl) idEl.value = proj.id;
   if (nomeEl) nomeEl.value = proj.nome || "";
   if (descEl) descEl.value = proj.descricao || "";
+  if (etqEl) etqEl.value = proj.etiqueta || "Contratos";
   if (titleEl) titleEl.textContent = `Editar Projeto: ${proj.nome}`;
   if (selEl) selEl.value = proj.id;
 
@@ -1292,6 +1331,7 @@ async function salvarProjetoEdicao(e) {
   const projId = document.getElementById("editProjId").value;
   const nome = document.getElementById("editProjNome").value.trim();
   const descricao = document.getElementById("editProjDescricao").value.trim();
+  const etiqueta = document.getElementById("editProjEtiqueta") ? document.getElementById("editProjEtiqueta").value : "Contratos";
 
   if (!projId) {
     showToast("Selecione um projeto para atualizar.", "alerta");
@@ -1306,7 +1346,7 @@ async function salvarProjetoEdicao(e) {
     const res = await fetch(`/api/projetos/${projId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ nome, descricao })
+      body: JSON.stringify({ nome, descricao, etiqueta })
     });
     const json = await res.json();
     if (json.success) {

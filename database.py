@@ -212,6 +212,7 @@ def init_db():
                     id SERIAL PRIMARY KEY,
                     nome TEXT NOT NULL UNIQUE,
                     descricao TEXT,
+                    etiqueta TEXT DEFAULT 'Contratos',
                     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -306,6 +307,7 @@ def init_db():
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     nome TEXT NOT NULL UNIQUE,
                     descricao TEXT,
+                    etiqueta TEXT DEFAULT 'Contratos',
                     criado_em TEXT DEFAULT (datetime('now', 'localtime'))
                 )
             """)
@@ -396,6 +398,19 @@ def init_db():
                     FOREIGN KEY (processo_id) REFERENCES processos(id) ON DELETE CASCADE
                 )
             """)
+
+        # Migração de coluna: etiqueta na tabela de projetos (SQLite e PostgreSQL)
+        try:
+            if conn.is_postgres:
+                cursor.execute("ALTER TABLE projetos ADD COLUMN IF NOT EXISTS etiqueta TEXT DEFAULT 'Contratos'")
+            else:
+                cursor.execute("PRAGMA table_info(projetos)")
+                colunas_proj = [col["name"] for col in cursor.fetchall()]
+                if "etiqueta" not in colunas_proj:
+                    cursor.execute("ALTER TABLE projetos ADD COLUMN etiqueta TEXT DEFAULT 'Contratos'")
+            cursor.execute("UPDATE projetos SET etiqueta = 'Contratos' WHERE etiqueta IS NULL OR etiqueta = ''")
+        except Exception as e_mig:
+            print(f"[!] Aviso na migração de etiqueta de projetos: {e_mig}")
 
         # Migração e normalização automática de datas para dia/mês/ano (DD/MM/AAAA)
         try:
@@ -580,25 +595,37 @@ def seed_initial_data(conn):
     """Carga inicial desativada - sistema pronto e 100% zerado para novos cadastros."""
     pass
 
-def obter_ou_criar_projeto(nome, descricao="", conn=None):
-    """Garante que o projeto seja único e retorna seu ID."""
+def obter_ou_criar_projeto(nome, descricao="", etiqueta="Contratos", conn=None):
+    """Garante que o projeto seja único e retorna seu ID, salvando ou atualizando a etiqueta (Contratos ou Pagamentos)."""
     deve_fechar = False
     if conn is None:
         conn = get_connection()
         deve_fechar = True
 
+    etiqueta_limpa = "Pagamentos" if str(etiqueta or "").strip().lower() == "pagamentos" else "Contratos"
+
     try:
         cursor = conn.cursor()
         nome_limpo = nome.strip().upper()
-        cursor.execute("SELECT id, descricao FROM projetos WHERE UPPER(nome) = ?", (nome_limpo,))
+        cursor.execute("SELECT id, descricao, etiqueta FROM projetos WHERE UPPER(nome) = ?", (nome_limpo,))
         row = cursor.fetchone()
         if row:
+            updates = []
+            params = []
             if descricao and not row["descricao"]:
-                cursor.execute("UPDATE projetos SET descricao = ? WHERE id = ?", (descricao.strip(), row["id"]))
+                updates.append("descricao = ?")
+                params.append(descricao.strip())
+            # Se forneceu uma etiqueta explicitamente diferente da padrão, ou se o banco estava nulo/vazio
+            if etiqueta and (not row.get("etiqueta") or (str(etiqueta).strip() and row.get("etiqueta") != etiqueta_limpa and etiqueta != "Contratos")):
+                updates.append("etiqueta = ?")
+                params.append(etiqueta_limpa)
+            if updates:
+                params.append(row["id"])
+                cursor.execute(f"UPDATE projetos SET {', '.join(updates)} WHERE id = ?", tuple(params))
                 conn.commit()
             return row["id"]
         
-        cursor.execute("INSERT INTO projetos (nome, descricao) VALUES (?, ?)", (nome.strip(), descricao.strip()))
+        cursor.execute("INSERT INTO projetos (nome, descricao, etiqueta) VALUES (?, ?, ?)", (nome.strip(), descricao.strip(), etiqueta_limpa))
         conn.commit()
         return cursor.lastrowid
     finally:
@@ -611,19 +638,25 @@ def obter_projeto(projeto_id):
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM projetos WHERE id = ?", (projeto_id,))
         row = cursor.fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        p_dict = dict(row)
+        if not p_dict.get("etiqueta"):
+            p_dict["etiqueta"] = "Contratos"
+        return p_dict
 
-def atualizar_projeto(projeto_id, nome, descricao=""):
-    """Permite editar o nome e a descrição/objeto de um projeto."""
+def atualizar_projeto(projeto_id, nome, descricao="", etiqueta="Contratos"):
+    """Permite editar o nome, a descrição/objeto e a etiqueta (Contratos ou Pagamentos) de um projeto."""
     with get_connection() as conn:
         cursor = conn.cursor()
         nome_limpo = nome.strip()
         desc_limpa = descricao.strip()
+        etiqueta_limpa = "Pagamentos" if str(etiqueta or "").strip().lower() == "pagamentos" else "Contratos"
         cursor.execute("""
             UPDATE projetos
-            SET nome = ?, descricao = ?
+            SET nome = ?, descricao = ?, etiqueta = ?
             WHERE id = ?
-        """, (nome_limpo, desc_limpa, projeto_id))
+        """, (nome_limpo, desc_limpa, etiqueta_limpa, projeto_id))
         conn.commit()
         return cursor.rowcount > 0
 
@@ -647,6 +680,8 @@ def listar_projetos_com_processos(apenas_monitorados=False):
         resultado = []
         for p_row in projetos_rows:
             proj = dict(p_row)
+            if not proj.get("etiqueta"):
+                proj["etiqueta"] = "Contratos"
             
             # Busca processos do projeto
             q_proc = "SELECT * FROM processos WHERE projeto_id = ?"
@@ -662,6 +697,7 @@ def listar_projetos_com_processos(apenas_monitorados=False):
                 proc = dict(r)
                 proc["projeto"] = proj["nome"]
                 proc["descricao"] = proj["descricao"]
+                proc["etiqueta"] = proj["etiqueta"]
                 proc["dias_no_setor"] = calcular_dias_no_setor(proc["data_recebimento"])
                 proc["data_recebimento"] = formatar_data_br(proc["data_recebimento"]) if proc["data_recebimento"] else ""
 
@@ -713,6 +749,7 @@ def listar_processos(apenas_monitorados=False):
                 p.projeto_id,
                 proj.nome AS projeto,
                 proj.descricao AS descricao,
+                proj.etiqueta AS etiqueta,
                 p.sistema,
                 p.numero_processo,
                 p.local_atual,
@@ -735,6 +772,8 @@ def listar_processos(apenas_monitorados=False):
         resultado = []
         for row in rows:
             proc = dict(row)
+            if not proc.get("etiqueta"):
+                proc["etiqueta"] = "Contratos"
             proc["dias_no_setor"] = calcular_dias_no_setor(proc["data_recebimento"])
             proc["data_recebimento"] = formatar_data_br(proc["data_recebimento"]) if proc["data_recebimento"] else ""
 
@@ -776,6 +815,7 @@ def obter_processo(processo_id):
                 p.projeto_id,
                 proj.nome AS projeto,
                 proj.descricao AS descricao,
+                proj.etiqueta AS etiqueta,
                 p.sistema,
                 p.numero_processo,
                 p.local_atual,
@@ -793,6 +833,8 @@ def obter_processo(processo_id):
         if not row:
             return None
         proc = dict(row)
+        if not proc.get("etiqueta"):
+            proc["etiqueta"] = "Contratos"
         proc["dias_no_setor"] = calcular_dias_no_setor(proc["data_recebimento"])
         proc["data_recebimento"] = formatar_data_br(proc["data_recebimento"]) if proc["data_recebimento"] else ""
 
@@ -820,9 +862,10 @@ def criar_processo(dados):
     with get_connection() as conn:
         nome_projeto = dados.get("projeto", "").strip() or "STI"
         descricao_projeto = dados.get("descricao", "").strip()
+        etiqueta_projeto = dados.get("etiqueta", "").strip() or "Contratos"
         
         # Garante o projeto único
-        projeto_id = obter_ou_criar_projeto(nome_projeto, descricao_projeto, conn=conn)
+        projeto_id = obter_ou_criar_projeto(nome_projeto, descricao_projeto, etiqueta=etiqueta_projeto, conn=conn)
 
         cursor = conn.cursor()
         monitorar_val = 1 if dados.get("monitorar", 1) in (1, "1", True, "true", "True") else 0
@@ -870,7 +913,7 @@ def atualizar_processo(processo_id, dados, registrar_novo_status=True):
 
         # Pega estado anterior
         cursor.execute("""
-            SELECT p.local_atual, p.acao, p.situacao, p.data_recebimento, p.projeto_id, proj.nome as projeto_nome
+            SELECT p.local_atual, p.acao, p.situacao, p.data_recebimento, p.projeto_id, proj.nome as projeto_nome, proj.etiqueta as projeto_etiqueta
             FROM processos p
             INNER JOIN projetos proj ON p.projeto_id = proj.id
             WHERE p.id = ?
@@ -881,7 +924,8 @@ def atualizar_processo(processo_id, dados, registrar_novo_status=True):
 
         nome_projeto = dados.get("projeto", "").strip() or anterior["projeto_nome"]
         descricao_projeto = dados.get("descricao", "").strip()
-        projeto_id = obter_ou_criar_projeto(nome_projeto, descricao_projeto, conn=conn)
+        etiqueta_projeto = dados.get("etiqueta", "").strip() or anterior.get("projeto_etiqueta", "Contratos")
+        projeto_id = obter_ou_criar_projeto(nome_projeto, descricao_projeto, etiqueta=etiqueta_projeto, conn=conn)
 
         monitorar_val = 1 if dados.get("monitorar", 1) in (1, "1", True, "true", "True") else 0
         local_atual = dados.get("local_atual", "").strip() or anterior["local_atual"] or "Aguardando Monitoramento"

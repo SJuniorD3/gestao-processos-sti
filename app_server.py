@@ -345,7 +345,7 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
             output.write('\ufeff')
             writer = csv.writer(output, delimiter=';')
             writer.writerow([
-                "ID", "PROJETO", "SISTEMA", "Nº - PROCESSO", "DESCRIÇÃO",
+                "ID", "PROJETO", "ETIQUETA", "SISTEMA", "Nº - PROCESSO", "DESCRIÇÃO",
                 "LOCAL ATUAL", "AÇÃO", "DATA RECEBIMENTO", "SITUAÇÃO", "DIAS NO SETOR", "4 ÚLTIMOS STATUS"
             ])
             for p in processos:
@@ -354,7 +354,7 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                     for s in p.get("ultimos_4_status", [])
                 ])
                 writer.writerow([
-                    p["id"], p["projeto"], p["sistema"], p["numero_processo"],
+                    p["id"], p["projeto"], p.get("etiqueta", "Contratos"), p["sistema"], p["numero_processo"],
                     p["descricao"], p["local_atual"], p["acao"],
                     formatar_data_br(p["data_recebimento"]) if p["data_recebimento"] else "-", p["situacao"],
                     p["dias_no_setor"] if p["dias_no_setor"] is not None else "-",
@@ -489,12 +489,13 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
             dados = self._read_json()
             nome = str(dados.get("nome", "")).strip()
             desc = str(dados.get("descricao", "")).strip()
+            etiqueta = str(dados.get("etiqueta", "Contratos")).strip()
             if not nome:
                 self._send_json({"success": False, "error": "O nome do projeto é obrigatório."}, 400)
                 return
             try:
-                proj_id = obter_ou_criar_projeto(nome, desc)
-                registrar_auditoria(curr["usuario"], "CRIAR_PROJETO", f"Cadastrou projeto '{nome}' (ID {proj_id})", self._get_client_ip())
+                proj_id = obter_ou_criar_projeto(nome, desc, etiqueta=etiqueta)
+                registrar_auditoria(curr["usuario"], "CRIAR_PROJETO", f"Cadastrou projeto '{nome}' (ID {proj_id}) com etiqueta '{etiqueta}'", self._get_client_ip())
                 self._send_json({"success": True, "id": proj_id, "message": "Projeto cadastrado com sucesso!"}, 201)
             except Exception as e:
                 self._send_json({"success": False, "error": f"Erro ao cadastrar projeto: {str(e)}"}, 400)
@@ -542,6 +543,7 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                             return padrao
 
                         i_proj = idx(["projeto", "nome do projeto", "proj"], 0)
+                        i_etiqueta = idx(["etiqueta", "tag", "categoria", "tipo projeto"], -1)
                         i_sis = idx(["sistema", "tipo", "origem"], 1)
                         i_num = idx(["numero_processo", "processo", "nº processo", "nº - processo", "numero", "nº"], 2)
                         i_desc = idx(["descricao", "descrição", "objeto", "objeto/descrição"], 3)
@@ -562,6 +564,7 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                             
                             registros.append({
                                 "projeto": col(i_proj, "STI"),
+                                "etiqueta": col(i_etiqueta, "Contratos"),
                                 "sistema": col(i_sis, "SEI"),
                                 "numero_processo": num_proc,
                                 "descricao": col(i_desc, ""),
@@ -776,9 +779,12 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 proj_id = int(path.split("/")[-1])
                 dados = self._read_json()
-                sucesso = atualizar_projeto(proj_id, dados.get("nome", ""), dados.get("descricao", ""))
+                nome = dados.get("nome", "")
+                descricao = dados.get("descricao", "")
+                etiqueta = dados.get("etiqueta", "Contratos")
+                sucesso = atualizar_projeto(proj_id, nome, descricao, etiqueta)
                 if sucesso:
-                    registrar_auditoria(curr["usuario"], "EDITAR_PROJETO", f"Atualizou projeto ID {proj_id} ({dados.get('nome')})", self._get_client_ip())
+                    registrar_auditoria(curr["usuario"], "EDITAR_PROJETO", f"Atualizou projeto ID {proj_id} ({nome}) - Etiqueta: {etiqueta}", self._get_client_ip())
                     self._send_json({"success": True, "message": "Projeto atualizado com sucesso!"})
                 else:
                     self._send_json({"success": False, "error": "Projeto não encontrado para atualização"}, 404)

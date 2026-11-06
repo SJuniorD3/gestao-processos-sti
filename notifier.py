@@ -41,7 +41,8 @@ def gerar_conteudo_resumo(tipo="Agendado"):
     
     for idx_proj, proj in enumerate(projetos, 1):
         procs = proj.get("processos", [])
-        txt_linhas.append(f"\n[PROJETO {idx_proj}] {proj['nome'].upper()} ({len(procs)} processos vinculados)")
+        etq_proj = proj.get("etiqueta") or "Contratos"
+        txt_linhas.append(f"\n[PROJETO {idx_proj}] {proj['nome'].upper()} [{etq_proj.upper()}] ({len(procs)} processos vinculados)")
         if proj.get("descricao"):
             txt_linhas.append(f"Objeto: {proj['descricao']}")
         txt_linhas.append("-" * 50)
@@ -95,8 +96,15 @@ def gerar_conteudo_resumo(tipo="Agendado"):
             coluna_projeto = ""
             coluna_desc = ""
             if i == 0:
+                etq = proj.get('etiqueta') or 'Contratos'
+                etq_cor = "#047857" if etq == "Pagamentos" else "#1d4ed8"
+                etq_bg = "#ecfdf5" if etq == "Pagamentos" else "#eff6ff"
+                etq_border = "#a7f3d0" if etq == "Pagamentos" else "#bfdbfe"
+                etq_icon = "💳" if etq == "Pagamentos" else "📄"
+
                 coluna_projeto = f"""
                 <td rowspan="{total_p}" style="padding: 12px; vertical-align: top; font-weight: bold; font-size: 14px; color: #1e3a8a; border-right: 2px solid #cbd5e1; background: #f8fafc;">
+                    <span style="display: inline-block; font-size: 10px; font-weight: bold; padding: 2px 7px; border-radius: 9999px; background: {etq_bg}; color: {etq_cor}; border: 1px solid {etq_border}; margin-bottom: 6px;">{etq_icon} {etq}</span><br>
                     {proj['nome']}
                     <span style="display: block; font-size: 11px; color: #64748b; font-weight: normal; margin-top: 4px;">({total_p} processos vinculados)</span>
                 </td>
@@ -312,10 +320,16 @@ def gerar_relatorio_executivo_formal_html(usuario="STI"):
         if not procs:
             continue
 
+        etq = proj.get('etiqueta') or 'Contratos'
+        etq_cor = "#047857" if etq == "Pagamentos" else "#1d4ed8"
+        etq_bg = "#ecfdf5" if etq == "Pagamentos" else "#eff6ff"
+        etq_border = "#a7f3d0" if etq == "Pagamentos" else "#bfdbfe"
+        etq_icon = "💳" if etq == "Pagamentos" else "📄"
+
         linhas_html.append(f"""
         <div class="projeto-bloco">
           <div class="projeto-header">
-            <h3>{idx_proj}. {proj['nome']}</h3>
+            <h3>{idx_proj}. {proj['nome']} <span style="font-size: 11px; padding: 2px 8px; border-radius: 9999px; background: {etq_bg}; color: {etq_cor}; border: 1px solid {etq_border}; font-weight: bold; margin-left: 8px;">{etq_icon} {etq}</span></h3>
             {f'<p class="projeto-desc"><strong>Objeto:</strong> {proj["descricao"]}</p>' if proj.get("descricao") else ''}
           </div>
           <table class="tabela-executiva">

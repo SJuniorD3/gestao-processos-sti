@@ -175,6 +175,12 @@
       <div class="toolbar-bottom-row">
         <span style="color: #64748b; font-weight: 600;">Filtrar por:</span>
 
+        <select id="filtroEtiqueta" class="filter-select" onchange="filtrarTabela()">
+          <option value="">Todas as Etiquetas</option>
+          <option value="Contratos">📄 Contratos</option>
+          <option value="Pagamentos">💳 Pagamentos</option>
+        </select>
+
         <select id="filtroSistema" class="filter-select" onchange="filtrarTabela()">
           <option value="">Todos os Sistemas</option>
           <option value="SEI">Apenas SEI</option>
@@ -268,11 +274,25 @@
               <datalist id="listaProjetosDatalist"></datalist>
             </div>
             <div class="form-group col-6">
+              <label for="formEtiqueta">Etiqueta do Projeto *</label>
+              <select id="formEtiqueta">
+                <option value="Contratos">1 - Contratos</option>
+                <option value="Pagamentos">2 - Pagamentos</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col-6">
               <label for="formSistema">Sistema Oficial *</label>
               <select id="formSistema" required>
                 <option value="SEI">SEI (Sistema Eletrônico de Informações)</option>
                 <option value="STARTGOV">STARTGOV (Compras e Licitações)</option>
               </select>
+            </div>
+            <div class="form-group col-6">
+              <label for="formNumero">Nº do Processo *</label>
+              <input type="text" id="formNumero" required placeholder="Ex: 202.522.010.200.056 ou SEDUC/00469/2026">
             </div>
           </div>
 
@@ -282,10 +302,6 @@
           </div>
 
           <div class="form-row">
-            <div class="form-group col-6">
-              <label for="formNumero">Nº do Processo *</label>
-              <input type="text" id="formNumero" required placeholder="Ex: 202.522.010.200.056 ou SEDUC/00469/2026">
-            </div>
             <div class="form-group col-6">
               <label for="formLocal">Local / Setor Atual</label>
               <input type="text" id="formLocal" placeholder="Ex: STI/SEDUC, SAOFC/SEDUC">
@@ -335,9 +351,18 @@
       </div>
       <form id="formNovoProjeto" onsubmit="salvarNovoProjeto(event)">
         <div class="modal-body">
-          <div class="form-group">
-            <label for="novoProjNome">Nome do Projeto *</label>
-            <input type="text" id="novoProjNome" required placeholder="Ex: PROTOCOLO WEB, DUARTE JR">
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="novoProjNome">Nome do Projeto *</label>
+              <input type="text" id="novoProjNome" required placeholder="Ex: PROTOCOLO WEB, DUARTE JR">
+            </div>
+            <div class="form-group col-6">
+              <label for="novoProjEtiqueta">Etiqueta do Projeto *</label>
+              <select id="novoProjEtiqueta">
+                <option value="Contratos">1 - Contratos</option>
+                <option value="Pagamentos">2 - Pagamentos</option>
+              </select>
+            </div>
           </div>
           <div class="form-group">
             <label for="novoProjDescricao">Descrição / Objeto do Projeto</label>
@@ -366,9 +391,18 @@
             <select id="editProjSelect" class="filter-select" style="width: 100%; padding: 8px 12px;" onchange="selecionarProjetoParaEditar(this.value)"></select>
           </div>
           <input type="hidden" id="editProjId">
-          <div class="form-group">
-            <label for="editProjNome">Nome do Projeto *</label>
-            <input type="text" id="editProjNome" required placeholder="Ex: DUARTE JR">
+          <div class="form-row">
+            <div class="form-group col-6">
+              <label for="editProjNome">Nome do Projeto *</label>
+              <input type="text" id="editProjNome" required placeholder="Ex: DUARTE JR">
+            </div>
+            <div class="form-group col-6">
+              <label for="editProjEtiqueta">Etiqueta do Projeto *</label>
+              <select id="editProjEtiqueta">
+                <option value="Contratos">1 - Contratos</option>
+                <option value="Pagamentos">2 - Pagamentos</option>
+              </select>
+            </div>
           </div>
           <div class="form-group">
             <label for="editProjDescricao">Descrição / Objeto do Projeto</label>
