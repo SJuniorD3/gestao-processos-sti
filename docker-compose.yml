@@ -1,0 +1,59 @@
+# ==============================================================================
+# Docker Compose - Sistema de Gestão e Monitoramento de Processos STI (SEDUC-MA)
+# Orquestração para Servidores de Produção e Homologação da ATI
+# ==============================================================================
+
+version: "3.8"
+
+services:
+  gestao-processos-sti:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gestao-processos-sti:v3.0-homologacao
+    container_name: gestao_processos_sti_app
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    env_file:
+      - .env
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - TZ=America/Fortaleza
+      - DATABASE_FILE=/app/data/processos_sti.db
+      # Se a ATI fornecer um banco PostgreSQL próprio ou Supabase, descomente e defina no .env:
+      # - DATABASE_URL=${DATABASE_URL}
+    volumes:
+      # Volume persistente para o banco SQLite local (garante que dados nunca sejam perdidos em updates)
+      - sti_data_volume:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 1024M
+        reservations:
+          cpus: "0.2"
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+    networks:
+      - sti_rede_interna
+
+volumes:
+  sti_data_volume:
+    name: sti_processos_data
+
+networks:
+  sti_rede_interna:
+    name: sti_rede_corporativa
+    driver: bridge

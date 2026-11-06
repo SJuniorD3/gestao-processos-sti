@@ -1,0 +1,14 @@
+.git
+.gitignore
+.venv
+venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env
+*.db-journal
+*.swp
+*.bak
+.DS_Store
+Thumbs.db

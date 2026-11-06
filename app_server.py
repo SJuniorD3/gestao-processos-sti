@@ -204,6 +204,33 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
             path.endswith(".ico") or path.endswith(".png") or path.endswith(".svg")):
             return super().do_GET()
 
+        # Healthcheck público para Docker, Kubernetes, Rancher e Monitoramento da ATI
+        if path in ("/health", "/api/health"):
+            try:
+                from database import get_connection
+                with get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT 1")
+                    cursor.fetchone()
+                db_engine = "postgresql" if getattr(conn, "is_postgres", False) else "sqlite"
+                db_status = "connected"
+                status_code = 200
+            except Exception as e_h:
+                db_engine = "unknown"
+                db_status = f"error: {str(e_h)}"
+                status_code = 503
+
+            self._send_json({
+                "status": "healthy" if status_code == 200 else "unhealthy",
+                "version": "3.0-homologacao",
+                "database": {
+                    "status": db_status,
+                    "engine": db_engine
+                },
+                "timestamp": datetime.datetime.now().isoformat()
+            }, status_code)
+            return
+
         # Todas as rotas /api/... exigem autenticação
         if path.startswith("/api/"):
             if not self._is_authenticated():

@@ -35,7 +35,8 @@ ADMIN_PASS = os.environ.get("ADMIN_PASS", "STIadmin")
 
 # Banco de Dados (PostgreSQL no Supabase / Nuvem ou SQLite local como fallback)
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
-DATABASE_FILE = BASE_DIR / "processos_sti.db"
+_db_file_env = os.environ.get("DATABASE_FILE", "").strip()
+DATABASE_FILE = Path(_db_file_env) if _db_file_env else (BASE_DIR / "processos_sti.db")
 
 # Horários de Envio Automático
 REPORT_HOURS = [
