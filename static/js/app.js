@@ -186,6 +186,7 @@ async function carregarUsuarioAtual() {
       const badge = document.getElementById("badgePerfilUsuario");
       const badgeSetor = document.getElementById("badgeSetorUsuario");
       const btnAdmin = document.getElementById("btnAdminUsuarios");
+      const menuAdmin = document.getElementById("menuAdminContainer");
 
       if (lbl) lbl.textContent = usuarioLogado.nome || usuarioLogado.usuario;
       if (badge) {
@@ -210,6 +211,9 @@ async function carregarUsuarioAtual() {
         badgeSetor.title = `Setor SEDUC do Usuário: ${sSigla}`;
       }
 
+      if (menuAdmin) {
+        menuAdmin.style.display = usuarioLogado.perfil === "admin" ? "inline-flex" : "none";
+      }
       if (btnAdmin) {
         btnAdmin.style.display = usuarioLogado.perfil === "admin" ? "inline-flex" : "none";
       }
@@ -1383,15 +1387,6 @@ async function salvarProjetoEdicao(e) {
     showToast("Erro na requisição ao salvar projeto.", "erro");
   }
 }
-      showToast(`✓ Projeto "${nome}" atualizado com sucesso!`, "sucesso");
-    } else {
-      showToast("Erro ao salvar projeto: " + json.error, "erro");
-    }
-  } catch (err) {
-    console.error(err);
-    showToast("Erro na requisição ao salvar projeto.", "erro");
-  }
-}
 
 async function excluirProjetoAtual() {
   const projId = document.getElementById("editProjId").value;
@@ -1839,10 +1834,49 @@ async function excluirSetor(id) {
 // -------------------------------------------------------------
 let usuariosCache = [];
 
-async function abrirModalUsuarios() {
+function alternarDropdownAdmin(e) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  const dropdown = document.getElementById("dropdownAdminMenu");
+  if (!dropdown) return;
+  const isAberto = dropdown.style.display === "block";
+  dropdown.style.display = isAberto ? "none" : "block";
+}
+
+function fecharDropdownAdmin() {
+  const dropdown = document.getElementById("dropdownAdminMenu");
+  if (dropdown) dropdown.style.display = "none";
+}
+
+function clicarUsuarioLogado() {
+  if (usuarioLogado && usuarioLogado.perfil === "admin") {
+    abrirModalUsuarios("usuarios");
+  } else {
+    showToast(`Sessão ativa: ${usuarioLogado ? (usuarioLogado.nome || usuarioLogado.usuario) : "Usuário"} (Setor ${usuarioLogado ? (usuarioLogado.setor_sigla || "STI") : "STI"})`, "info");
+  }
+}
+
+// Fecha dropdown administrativo ao clicar fora dele
+document.addEventListener("click", (e) => {
+  const menuContainer = document.getElementById("menuAdminContainer");
+  if (menuContainer && !menuContainer.contains(e.target)) {
+    fecharDropdownAdmin();
+  }
+});
+
+async function abrirModalUsuarios(aba = "usuarios") {
+  fecharDropdownAdmin();
   document.getElementById("modalUsuarios").style.display = "flex";
   await carregarSetores();
-  alternarAbaUsuarios("usuarios");
+  alternarAbaUsuarios(aba || "usuarios");
+  if (aba === "usuarios") {
+    setTimeout(() => {
+      const nomeInput = document.getElementById("formUsuarioNome");
+      if (nomeInput) nomeInput.focus();
+    }, 80);
+  }
 }
 
 function fecharModalUsuarios() {

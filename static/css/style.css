@@ -1567,3 +1567,108 @@ body {
   color: #ffffff;
   border: 1px solid rgba(255, 255, 255, 0.4);
 }
+
+/* ==========================================================================
+   MENU ADMINISTRATIVO COM DESTAQUE & DROPDOWN
+   ========================================================================== */
+.dropdown-admin {
+  position: relative;
+  display: inline-flex;
+}
+
+.btn-admin-highlight {
+  background: linear-gradient(135deg, #1e3a8a, #2563eb);
+  color: #ffffff !important;
+  border: 1px solid #1d4ed8;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.25);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-admin-highlight:hover {
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+  transform: translateY(-1px);
+}
+
+.dropdown-admin-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: 280px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px -4px rgba(15, 23, 42, 0.18), 0 4px 10px -2px rgba(15, 23, 42, 0.08);
+  z-index: 2000;
+  padding: 6px;
+}
+
+.dropdown-admin-header {
+  padding: 8px 12px 6px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dropdown-admin-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: #0f172a;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.dropdown-admin-item:hover {
+  background: #f1f5f9;
+  transform: translateX(2px);
+}
+
+.dropdown-admin-item .item-icon {
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+.dropdown-admin-item:hover .item-icon {
+  background: #dbeafe;
+}
+
+.dropdown-admin-item .item-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.dropdown-admin-item .item-desc {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 1px;
+  line-height: 1.3;
+}

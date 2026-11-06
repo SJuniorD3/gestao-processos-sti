@@ -56,15 +56,56 @@
         <button class="btn btn-outline" onclick="abrirModalSistemas()">
           <span class="icon">🔑</span> Portais
         </button>
-        <button class="btn btn-outline" id="btnAdminUsuarios" onclick="abrirModalUsuarios()" style="display: none;" title="Gerenciar usuários e trilha de auditoria">
-          <span class="icon">👥</span> Usuários
-        </button>
+
+        <!-- Menu Administrativo com Destaque e Dropdown -->
+        <div class="dropdown-admin" id="menuAdminContainer" style="display: none;">
+          <button type="button" class="btn btn-admin-highlight" id="btnMenuAdmin" onclick="alternarDropdownAdmin(event)" title="Abrir Menu Administrativo do Sistema">
+            <span class="icon">⚙️</span>
+            <span>Menu Administrativo</span>
+            <span style="font-size: 9px; margin-left: 2px;">▼</span>
+          </button>
+          <div class="dropdown-admin-menu" id="dropdownAdminMenu">
+            <div class="dropdown-admin-header">
+              <span>⚙️ Painel Administrativo</span>
+            </div>
+            <a href="javascript:void(0)" onclick="fecharDropdownAdmin(); abrirModalUsuarios('usuarios');" class="dropdown-admin-item">
+              <span class="item-icon">👥</span>
+              <div>
+                <span class="item-title">Cadastro de Usuários</span>
+                <span class="item-desc">Criar, editar logins, senhas e perfis</span>
+              </div>
+            </a>
+            <a href="javascript:void(0)" onclick="fecharDropdownAdmin(); abrirModalUsuarios('setores');" class="dropdown-admin-item">
+              <span class="item-icon">🏢</span>
+              <div>
+                <span class="item-title">Setores da SEDUC</span>
+                <span class="item-desc">Gerenciar siglas e setores monitorados</span>
+              </div>
+            </a>
+            <a href="javascript:void(0)" onclick="fecharDropdownAdmin(); abrirModalUsuarios('auditoria');" class="dropdown-admin-item">
+              <span class="item-icon">📜</span>
+              <div>
+                <span class="item-title">Trilha de Auditoria</span>
+                <span class="item-desc">Logs de acessos e ações do sistema</span>
+              </div>
+            </a>
+            <div style="border-top: 1px solid #f1f5f9; margin: 4px 0;"></div>
+            <a href="javascript:void(0)" onclick="fecharDropdownAdmin(); abrirModalSistemas();" class="dropdown-admin-item">
+              <span class="item-icon">🔑</span>
+              <div>
+                <span class="item-title">Portais SEI & StartGov</span>
+                <span class="item-desc">Credenciais e status de conexão</span>
+              </div>
+            </a>
+          </div>
+        </div>
+
         <button class="btn btn-outline" onclick="dispararResumoAgora()" title="Disparar relatório agora">
           <span class="icon">⚡</span> Disparar
         </button>
 
         <!-- Indicador de Usuário Logado -->
-        <div id="usuarioLogadoBox" style="display: flex; align-items: center; gap: 8px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 8px; font-size: 12px;">
+        <div id="usuarioLogadoBox" onclick="clicarUsuarioLogado()" style="display: flex; align-items: center; gap: 8px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 4px 10px; border-radius: 8px; font-size: 12px; cursor: pointer;" title="Perfil do Usuário (Admin: clique para gerenciar usuários)">
           <span>👤</span>
           <span id="labelNomeUsuario" style="font-weight: 700; color: #0f172a; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Carregando...</span>
           <span id="badgePerfilUsuario" style="font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; background: #dbeafe; color: #1e40af;">Admin</span>
@@ -676,8 +717,8 @@
     <div class="modal-content modal-content-lg">
       <div class="modal-header">
         <div class="modal-header-text">
-          <h2>Controle de Usuários, Setores & Auditoria</h2>
-          <span>Gerencie os perfis de acesso, setores da SEDUC e consulte a trilha de auditoria</span>
+          <h2>⚙️ Painel Administrativo: Usuários, Setores & Auditoria</h2>
+          <span>Gerencie os perfis de acesso, cadastre novos usuários, configure setores da SEDUC e consulte a auditoria</span>
         </div>
         <button type="button" class="btn-close" onclick="fecharModalUsuarios()">&times;</button>
       </div>
@@ -685,7 +726,7 @@
       <!-- Abas de Navegação -->
       <div style="display: flex; border-bottom: 1px solid #e2e8f0; background: #f8fafc; padding: 0 20px;">
         <button type="button" id="tabBtnUsuarios" class="view-btn active" style="border-radius: 0; padding: 12px 16px; border-bottom: 2px solid #2563eb; font-weight: 700;" onclick="alternarAbaUsuarios('usuarios')">
-          👥 Usuários Cadastrados
+          👥 Cadastro & Gestão de Usuários
         </button>
         <button type="button" id="tabBtnSetores" class="view-btn" style="border-radius: 0; padding: 12px 16px; font-weight: 600;" onclick="alternarAbaUsuarios('setores')">
           🏢 Setores da SEDUC
