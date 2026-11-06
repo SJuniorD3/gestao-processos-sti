@@ -216,7 +216,13 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
         # Rota da API: Lista de Processos
         if path == "/api/processos":
             try:
+                curr = self._get_current_user()
                 filtro_setor = query.get("setor", [None])[0]
+                if filtro_setor in ("", "None", "null", "undefined"):
+                    filtro_setor = None
+                if curr and curr.get("perfil") != "admin":
+                    u_db = obter_usuario_por_login(curr["usuario"]) if curr else None
+                    filtro_setor = u_db.get("setor_sigla", "STI") if u_db else "STI"
                 processos = listar_processos(setor=filtro_setor)
                 self._send_json({"success": True, "data": processos})
             except Exception as e:
@@ -228,11 +234,19 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
             try:
                 curr = self._get_current_user()
                 filtro_setor = query.get("setor", [None])[0]
-                # Se não for admin e nenhum filtro for passado explicitamente, filtra pelo setor do usuário logado
-                if curr and curr.get("perfil") != "admin" and not filtro_setor:
-                    u_db = obter_usuario_por_login(curr["usuario"])
+                if filtro_setor in ("", "None", "null", "undefined"):
+                    filtro_setor = None
+
+                # Se o usuário for admin, tem visão de todos os projetos cadastrados por padrão
+                if curr and curr.get("perfil") == "admin":
+                    # Admin pode ver todos os projetos ou filtrar por um setor específico
+                    projetos = listar_projetos_com_processos(setor=filtro_setor)
+                else:
+                    # Operador / Leitor: visão restrita ao setor do usuário
+                    u_db = obter_usuario_por_login(curr["usuario"]) if curr else None
                     filtro_setor = u_db.get("setor_sigla", "STI") if u_db else "STI"
-                projetos = listar_projetos_com_processos(setor=filtro_setor)
+                    projetos = listar_projetos_com_processos(setor=filtro_setor)
+
                 self._send_json({"success": True, "data": projetos, "setor_filtrado": filtro_setor})
             except Exception as e:
                 self._send_json({"success": False, "error": f"Erro ao listar projetos: {str(e)}"}, 500)
@@ -288,7 +302,12 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
 
         # Rota da API: Pré-visualização do Relatório
         if path == "/api/relatorios/preview":
-            resumo = gerar_conteudo_resumo("Pré-visualização")
+            curr = self._get_current_user()
+            setor_filtro = None
+            if curr and curr.get("perfil") != "admin":
+                u_db = obter_usuario_por_login(curr["usuario"]) if curr else None
+                setor_filtro = u_db.get("setor_sigla", "STI") if u_db else "STI"
+            resumo = gerar_conteudo_resumo("Pré-visualização", setor=setor_filtro)
             self._send_json({"success": True, "data": resumo})
             return
 
@@ -296,14 +315,22 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
         if path == "/relatorio-executivo":
             curr = self._get_current_user()
             user_nome = (curr.get("nome") or curr.get("usuario") or "STI") if curr else "STI"
-            html_exec = gerar_relatorio_executivo_formal_html(usuario=user_nome)
+            setor_filtro = None
+            if curr and curr.get("perfil") != "admin":
+                u_db = obter_usuario_por_login(curr["usuario"]) if curr else None
+                setor_filtro = u_db.get("setor_sigla", "STI") if u_db else "STI"
+            html_exec = gerar_relatorio_executivo_formal_html(usuario=user_nome, setor=setor_filtro)
             self._send_html(html_exec)
             return
 
         if path == "/api/relatorios/executivo":
             curr = self._get_current_user()
             user_nome = (curr.get("nome") or curr.get("usuario") or "STI") if curr else "STI"
-            html_exec = gerar_relatorio_executivo_formal_html(usuario=user_nome)
+            setor_filtro = None
+            if curr and curr.get("perfil") != "admin":
+                u_db = obter_usuario_por_login(curr["usuario"]) if curr else None
+                setor_filtro = u_db.get("setor_sigla", "STI") if u_db else "STI"
+            html_exec = gerar_relatorio_executivo_formal_html(usuario=user_nome, setor=setor_filtro)
             self._send_json({"success": True, "html": html_exec})
             return
 
@@ -447,13 +474,18 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_header("Content-Type", "application/json; charset=utf-8")
                 self.send_header("Set-Cookie", f"sti_session={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=604800")
                 self.end_headers()
+                user_setor = "STI"
+                if u_db and u_db.get("setor_sigla"):
+                    user_setor = u_db["setor_sigla"]
+
                 self.wfile.write(json.dumps({
                     "success": True,
                     "token": token,
                     "user": {
                         "usuario": user_input,
                         "nome": nome_usuario,
-                        "perfil": perfil
+                        "perfil": perfil,
+                        "setor_sigla": user_setor
                     },
                     "message": "Login realizado com sucesso!"
                 }).encode("utf-8"))

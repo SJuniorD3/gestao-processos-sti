@@ -496,23 +496,51 @@ def init_db():
         except Exception:
             pass
 
-        # Seed do usuário Administrador se não existir na tabela
+        # Seed dos usuários padrão se não existirem na tabela (admin, vicente, klelia)
         try:
-            admin_username = (ADMIN_USER or "admin").strip().lower()
-            cursor.execute("SELECT id FROM usuarios WHERE LOWER(usuario) = ?", (admin_username,))
-            admin_row = cursor.fetchone()
-            if not admin_row:
-                admin_password = (ADMIN_PASS or "STIadmin").strip()
-                hash_admin = gerar_hash_senha(admin_password)
-                cursor.execute("""
-                    INSERT INTO usuarios (nome, usuario, senha_hash, perfil, setor_sigla, ativo)
-                    VALUES (?, ?, ?, 'admin', 'STI', 1)
-                """, ("Administrador STI", admin_username, hash_admin))
-                
-                cursor.execute("""
-                    INSERT INTO auditoria_logs (usuario, acao, detalhes, ip)
-                    VALUES (?, 'SISTEMA_INIT', 'Criação do usuário administrador padrão', '127.0.0.1')
-                """, (admin_username,))
+            usuarios_iniciais = [
+                {
+                    "usuario": (ADMIN_USER or "admin").strip().lower(),
+                    "nome": "Administrador STI",
+                    "perfil": "admin",
+                    "setor_sigla": "STI",
+                    "senha": (ADMIN_PASS or "STIadmin").strip()
+                },
+                {
+                    "usuario": "vicente",
+                    "nome": "Vicente Sousa Rocha Neto",
+                    "perfil": "operador",
+                    "setor_sigla": "STI",
+                    "senha": "STIoperador"
+                },
+                {
+                    "usuario": "klelia",
+                    "nome": "Klelia",
+                    "perfil": "operador",
+                    "setor_sigla": "STI",
+                    "senha": "STIoperador"
+                }
+            ]
+
+            for u_init in usuarios_iniciais:
+                cursor.execute("SELECT id, setor_sigla, perfil, ativo FROM usuarios WHERE LOWER(usuario) = ?", (u_init["usuario"],))
+                u_existente = cursor.fetchone()
+                if not u_existente:
+                    hash_pwd = gerar_hash_senha(u_init["senha"])
+                    cursor.execute("""
+                        INSERT INTO usuarios (nome, usuario, senha_hash, perfil, setor_sigla, ativo)
+                        VALUES (?, ?, ?, ?, ?, 1)
+                    """, (u_init["nome"], u_init["usuario"], hash_pwd, u_init["perfil"], u_init["setor_sigla"]))
+                    cursor.execute("""
+                        INSERT INTO auditoria_logs (usuario, acao, detalhes, ip)
+                        VALUES (?, 'SISTEMA_INIT', ?, '127.0.0.1')
+                    """, (u_init["usuario"], f"Criação do usuário padrão {u_init['usuario']} ({u_init['perfil']} - Setor {u_init['setor_sigla']})"))
+                else:
+                    cursor.execute("""
+                        UPDATE usuarios
+                        SET setor_sigla = ?, ativo = 1, perfil = CASE WHEN ? = 'admin' THEN 'admin' ELSE perfil END
+                        WHERE id = ?
+                    """, (u_init["setor_sigla"], u_init["perfil"], u_existente["id"]))
         except Exception as e:
             print(f"[!] Aviso ao verificar usuários iniciais: {e}")
 
@@ -654,21 +682,40 @@ def listar_usuarios():
         cursor.execute("SELECT id, nome, usuario, perfil, setor_sigla, ativo, criado_em FROM usuarios ORDER BY id ASC")
         rows = cursor.fetchall()
         
-        # Garante que o administrador padrão conste no banco e na listagem
-        admin_user = (ADMIN_USER or "admin").strip().lower()
-        has_admin = any(str(r.get("usuario", "")).lower() == admin_user for r in rows)
-        if not has_admin:
-            try:
-                hash_admin = gerar_hash_senha((ADMIN_PASS or "STIadmin").strip())
-                cursor.execute("""
-                    INSERT INTO usuarios (nome, usuario, senha_hash, perfil, setor_sigla, ativo)
-                    VALUES (?, ?, ?, 'admin', 'STI', 1)
-                """, ("Administrador STI", admin_user, hash_admin))
-                conn.commit()
-                cursor.execute("SELECT id, nome, usuario, perfil, setor_sigla, ativo, criado_em FROM usuarios ORDER BY id ASC")
-                rows = cursor.fetchall()
-            except Exception as e:
-                print(f"[!] Erro ao auto-inserir admin padrão em listar_usuarios: {e}")
+        # Garante que os usuários padrão constem no banco e na listagem
+        usuarios_padrao = [
+            ((ADMIN_USER or "admin").strip().lower(), "Administrador STI", "admin", "STI", (ADMIN_PASS or "STIadmin").strip()),
+            ("vicente", "Vicente Sousa Rocha Neto", "operador", "STI", "STIoperador"),
+            ("klelia", "Klelia", "operador", "STI", "STIoperador")
+        ]
+        
+        recarregar = False
+        logins_existentes = {str(r.get("usuario", "")).lower() for r in rows}
+        for u_login, u_nome, u_perfil, u_setor, u_senha in usuarios_padrao:
+            if u_login not in logins_existentes:
+                try:
+                    hash_p = gerar_hash_senha(u_senha)
+                    cursor.execute("""
+                        INSERT INTO usuarios (nome, usuario, senha_hash, perfil, setor_sigla, ativo)
+                        VALUES (?, ?, ?, ?, ?, 1)
+                    """, (u_nome, u_login, hash_p, u_perfil, u_setor))
+                    recarregar = True
+                except Exception as e:
+                    print(f"[!] Erro ao auto-inserir {u_login} em listar_usuarios: {e}")
+            else:
+                # Garante que vicente e klelia estejam no setor STI
+                try:
+                    cursor.execute("""
+                        UPDATE usuarios SET setor_sigla = ?, ativo = 1 WHERE LOWER(usuario) = ?
+                    """, (u_setor, u_login))
+                    recarregar = True
+                except Exception:
+                    pass
+        
+        if recarregar:
+            conn.commit()
+            cursor.execute("SELECT id, nome, usuario, perfil, setor_sigla, ativo, criado_em FROM usuarios ORDER BY id ASC")
+            rows = cursor.fetchall()
         
         resultado = []
         for r in rows:

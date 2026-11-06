@@ -13,11 +13,11 @@ from database import (
     formatar_data_br, formatar_data_hora_br
 )
 
-def gerar_conteudo_resumo(tipo="Agendado"):
+def gerar_conteudo_resumo(tipo="Agendado", setor=None):
     """Gera tanto a versão HTML quanto a versão Texto/Markdown do resumo diário.
        AGRUPADO POR PROJETO: Um projeto pode conter múltiplos processos (SEI e STARTGOV).
        Monitore ESTRITAMENTE somente os processos cadastrados ativos para monitoramento."""
-    projetos = listar_projetos_com_processos(apenas_monitorados=True)
+    projetos = listar_projetos_com_processos(apenas_monitorados=True, setor=setor)
     agora = datetime.datetime.now()
     data_formatada = agora.strftime("%d/%m/%Y às %H:%M")
     
@@ -327,9 +327,9 @@ def executar_envio_resumo(tipo="Agendado"):
         "data_formatada": resumo["data_formatada"]
     }
 
-def gerar_relatorio_executivo_formal_html(usuario="STI"):
+def gerar_relatorio_executivo_formal_html(usuario="STI", setor=None):
     """Gera um documento HTML completo, timbrado e formatado para impressão executiva A4 / PDF."""
-    projetos = listar_projetos_com_processos(apenas_monitorados=True)
+    projetos = listar_projetos_com_processos(apenas_monitorados=True, setor=setor)
     agora = datetime.datetime.now()
     data_formatada = agora.strftime("%d/%m/%Y às %H:%M:%S")
 

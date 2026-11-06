@@ -167,10 +167,10 @@ function exibirSkeletons() {
 
 let setoresCache = [];
 
-document.addEventListener("DOMContentLoaded", () => {
-  carregarSetores();
-  carregarUsuarioAtual();
-  carregarDados();
+document.addEventListener("DOMContentLoaded", async () => {
+  await carregarUsuarioAtual();
+  await carregarSetores();
+  await carregarDados();
   atualizarStatusAgendador();
   carregarHistoricoDisparos();
   setInterval(atualizarStatusAgendador, 30000);
@@ -552,7 +552,15 @@ function filtrarTabela() {
 
 function limparFiltrosV3() {
   if (document.getElementById("filtroTexto")) document.getElementById("filtroTexto").value = "";
-  if (document.getElementById("filtroSetor")) document.getElementById("filtroSetor").value = "";
+  if (document.getElementById("filtroSetor")) {
+    if (usuarioLogado && usuarioLogado.perfil === "admin") {
+      document.getElementById("filtroSetor").value = "";
+    } else if (usuarioLogado && usuarioLogado.setor_sigla) {
+      document.getElementById("filtroSetor").value = usuarioLogado.setor_sigla;
+    } else {
+      document.getElementById("filtroSetor").value = "";
+    }
+  }
   if (document.getElementById("filtroLocal")) document.getElementById("filtroLocal").value = "";
   if (document.getElementById("filtroSistema")) document.getElementById("filtroSistema").value = "";
   if (document.getElementById("filtroEtiqueta")) document.getElementById("filtroEtiqueta").value = "";
@@ -1622,20 +1630,34 @@ async function carregarSetores() {
 
 function popularSelectSetores(lista) {
   const ativos = lista.filter(s => s.ativo === 1 || s.ativo === "1" || s.ativo === true);
+  const isAdmin = usuarioLogado && usuarioLogado.perfil === "admin";
+  const userSetor = (usuarioLogado && usuarioLogado.setor_sigla) ? usuarioLogado.setor_sigla.toUpperCase() : "STI";
 
   // 1. Filtro da Toolbar
   const filtroSel = document.getElementById("filtroSetor");
   if (filtroSel) {
-    const valAtual = filtroSel.value;
-    filtroSel.innerHTML = '<option value="">🏢 Todos os Setores SEDUC</option>' +
-      ativos.map(s => `<option value="${escapeHtml(s.sigla)}">🏢 ${escapeHtml(s.sigla)} - ${escapeHtml(s.nome)}</option>`).join("");
-    if (valAtual) filtroSel.value = valAtual;
+    if (isAdmin) {
+      const valAtual = filtroSel.value;
+      filtroSel.disabled = false;
+      filtroSel.title = "Filtrar por setor responsável (Admin tem visão de todos os projetos cadastrados)";
+      filtroSel.innerHTML = '<option value="">🏢 Todos os Setores SEDUC (Visão Geral)</option>' +
+        ativos.map(s => `<option value="${escapeHtml(s.sigla)}">🏢 ${escapeHtml(s.sigla)} - ${escapeHtml(s.nome)}</option>`).join("");
+      filtroSel.value = valAtual || "";
+    } else {
+      // Operador ou Leitor: restrito e focado no seu setor
+      filtroSel.innerHTML = ativos
+        .filter(s => s.sigla.toUpperCase() === userSetor)
+        .map(s => `<option value="${escapeHtml(s.sigla)}">🏢 ${escapeHtml(s.sigla)} - ${escapeHtml(s.nome)}</option>`).join("");
+      filtroSel.value = userSetor;
+      filtroSel.disabled = true;
+      filtroSel.title = `Visualização restrita ao setor: ${userSetor}`;
+    }
   }
 
   // 2. Modal Novo Projeto
   const novoSel = document.getElementById("novoProjSetor");
   if (novoSel) {
-    const valAtual = novoSel.value || (usuarioLogado ? usuarioLogado.setor_sigla : "STI");
+    const valAtual = novoSel.value || userSetor;
     novoSel.innerHTML = ativos.map(s => `<option value="${escapeHtml(s.sigla)}">${escapeHtml(s.sigla)} - ${escapeHtml(s.nome)}</option>`).join("");
     if (valAtual) novoSel.value = valAtual;
   }
