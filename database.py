@@ -313,6 +313,15 @@ def init_db():
                     criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+
+            # 8. Tabela de Configurações do Sistema e Canais de Disparo (PostgreSQL)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS configuracoes_sistema (
+                    chave TEXT PRIMARY KEY,
+                    valor TEXT,
+                    atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
         else:
             # 0. Tabela de Setores da SEDUC (SQLite)
             cursor.execute("""
@@ -422,6 +431,15 @@ def init_db():
                     link_visualizacao TEXT,
                     criado_em TEXT DEFAULT (datetime('now', 'localtime')),
                     FOREIGN KEY (processo_id) REFERENCES processos(id) ON DELETE CASCADE
+                )
+            """)
+
+            # 8. Tabela de Configurações do Sistema e Canais de Disparo (SQLite)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS configuracoes_sistema (
+                    chave TEXT PRIMARY KEY,
+                    valor TEXT,
+                    atualizado_em TEXT DEFAULT (datetime('now', 'localtime'))
                 )
             """)
 
@@ -819,6 +837,48 @@ def listar_auditoria(limite=100):
             LIMIT ?
         """, (int(limite),))
         return cursor.fetchall()
+
+# -------------------------------------------------------------
+# CONFIGURAÇÕES DINÂMICAS DO SISTEMA (CANAIS DE DISPARO)
+# -------------------------------------------------------------
+def obter_configuracao(chave, default=None):
+    """Busca o valor de uma configuração do sistema (banco de dados com fallback)."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT valor FROM configuracoes_sistema WHERE chave = ?", (str(chave).strip(),))
+        row = cursor.fetchone()
+        if row and row["valor"] is not None:
+            return row["valor"]
+        return default
+
+def salvar_configuracao(chave, valor):
+    """Salva ou atualiza uma configuração do sistema no banco."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        k = str(chave).strip()
+        v = str(valor) if valor is not None else ""
+        if conn.is_postgres:
+            cursor.execute("""
+                INSERT INTO configuracoes_sistema (chave, valor, atualizado_em)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor, atualizado_em = CURRENT_TIMESTAMP
+            """, (k, v))
+        else:
+            cursor.execute("""
+                INSERT INTO configuracoes_sistema (chave, valor, atualizado_em)
+                VALUES (?, ?, datetime('now', 'localtime'))
+                ON CONFLICT(chave) DO UPDATE SET valor = excluded.valor, atualizado_em = datetime('now', 'localtime')
+            """, (k, v))
+        conn.commit()
+        return True
+
+def obter_todas_configuracoes():
+    """Retorna todas as configurações salvas em formato de dicionário chave: valor."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT chave, valor FROM configuracoes_sistema")
+        rows = cursor.fetchall()
+        return {r["chave"]: r["valor"] for r in rows}
 
 def limpar_todos_os_dados():
     """Remove absolutamente todos os projetos, processos, históricos e relatórios, deixando o sistema 100% zerado."""

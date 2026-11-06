@@ -82,6 +82,13 @@
                 <span class="item-desc">Gerenciar siglas e setores monitorados</span>
               </div>
             </a>
+            <a href="javascript:void(0)" onclick="fecharDropdownAdmin(); abrirModalUsuarios('canais');" class="dropdown-admin-item">
+              <span class="item-icon">📡</span>
+              <div>
+                <span class="item-title">Canais de Disparo</span>
+                <span class="item-desc">Configurar E-mail (SMTP) e Webhook</span>
+              </div>
+            </a>
             <a href="javascript:void(0)" onclick="fecharDropdownAdmin(); abrirModalUsuarios('auditoria');" class="dropdown-admin-item">
               <span class="item-icon">📜</span>
               <div>
@@ -731,6 +738,9 @@
         <button type="button" id="tabBtnSetores" class="view-btn" style="border-radius: 0; padding: 12px 16px; font-weight: 600;" onclick="alternarAbaUsuarios('setores')">
           🏢 Setores da SEDUC
         </button>
+        <button type="button" id="tabBtnCanais" class="view-btn" style="border-radius: 0; padding: 12px 16px; font-weight: 600;" onclick="alternarAbaUsuarios('canais')">
+          📡 Canais de Disparo (E-mail & Webhook)
+        </button>
         <button type="button" id="tabBtnAuditoria" class="view-btn" style="border-radius: 0; padding: 12px 16px; font-weight: 600;" onclick="alternarAbaUsuarios('auditoria')">
           📜 Trilha de Auditoria
         </button>
@@ -877,6 +887,111 @@
               </tbody>
             </table>
           </div>
+        </div>
+
+        <!-- ABA 4: CANAIS DE DISPARO (E-MAIL & WEBHOOK) -->
+        <div id="abaConteudoCanais" style="display: none;">
+          <form id="formCanaisDisparo" onsubmit="salvarConfiguracoesCanais(event)">
+            
+            <!-- CARD 1: E-MAIL (SMTP) -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin-bottom: 20px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="font-size: 20px;">📧</span>
+                  <div>
+                    <h3 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0;">Notificações por E-mail (Servidor SMTP)</h3>
+                    <span style="font-size: 11px; color: #64748b;">Disparo automático de resumos diários consolidando processos e SLAs</span>
+                  </div>
+                </div>
+                <label style="display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 700; color: #1e3a8a; background: #ffffff; border: 1px solid #cbd5e1; padding: 6px 12px; border-radius: 8px;">
+                  <input type="checkbox" id="cfgEmailEnabled" style="width: 16px; height: 16px; cursor: pointer;">
+                  <span>Habilitar Envio por E-mail</span>
+                </label>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group col-4">
+                  <label for="cfgSmtpServer">Servidor SMTP *</label>
+                  <input type="text" id="cfgSmtpServer" placeholder="Ex: smtp.gmail.com ou smtp.office365.com">
+                </div>
+                <div class="form-group col-2">
+                  <label for="cfgSmtpPort">Porta *</label>
+                  <input type="number" id="cfgSmtpPort" placeholder="587" value="587">
+                </div>
+                <div class="form-group col-6">
+                  <label for="cfgSmtpUser">E-mail Remetente / Usuário SMTP *</label>
+                  <input type="email" id="cfgSmtpUser" placeholder="Ex: notificacoes.sti@seduc.ma.gov.br">
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group col-6">
+                  <label for="cfgSmtpPass">Senha do E-mail / Senha de App</label>
+                  <input type="password" id="cfgSmtpPass" placeholder="Digite para definir ou alterar a senha...">
+                  <small style="font-size: 10.5px; color: #64748b; margin-top: 3px; display: block;" id="msgDicaSenhaSMTP">Para Gmail, use uma Senha de App de 16 dígitos gerada na Conta Google.</small>
+                </div>
+                <div class="form-group col-6">
+                  <label for="cfgEmailTo">Destinatários dos Relatórios (separados por vírgula) *</label>
+                  <input type="text" id="cfgEmailTo" placeholder="Ex: diretor@seduc.ma.gov.br, vicente@seduc.ma.gov.br">
+                </div>
+              </div>
+
+              <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                <button type="button" class="btn btn-sm btn-outline" id="btnTestarEmail" onclick="testarConexaoEmail()">
+                  <span class="icon">🧪</span> Testar Envio de E-mail
+                </button>
+              </div>
+            </div>
+
+            <!-- CARD 2: WEBHOOK (WhatsApp, Telegram, Teams, Discord) -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin-bottom: 20px;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                <span style="font-size: 20px;">💬</span>
+                <div>
+                  <h3 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0;">Webhook de Mensageria (WhatsApp / Telegram / Teams / Discord)</h3>
+                  <span style="font-size: 11px; color: #64748b;">Receba os resumos consolidados diretamente em canais ou grupos</span>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="cfgWebhookUrl">URL do Webhook</label>
+                <input type="url" id="cfgWebhookUrl" placeholder="Ex: https://discord.com/api/webhooks/... ou webhook da API de WhatsApp/Telegram/Teams">
+                <small style="font-size: 11px; color: #64748b; margin-top: 4px; display: block;">
+                  O sistema dispara um payload JSON com <code>text</code> e <code>content</code> contendo o resumo formatado dos processos nos horários agendados.
+                </small>
+              </div>
+
+              <div style="display: flex; justify-content: flex-end; margin-top: 8px;">
+                <button type="button" class="btn btn-sm btn-outline" id="btnTestarWebhook" onclick="testarConexaoWebhook()">
+                  <span class="icon">🧪</span> Testar Disparo de Webhook
+                </button>
+              </div>
+            </div>
+
+            <!-- CARD 3: HORÁRIOS DE DISPARO -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin-bottom: 20px;">
+              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+                <span style="font-size: 20px;">⏰</span>
+                <div>
+                  <h3 style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0;">Horários Programados para os Disparos Automáticos</h3>
+                  <span style="font-size: 11px; color: #64748b;">Horários do dia em que os relatórios automáticos são transmitidos nos canais ativos</span>
+                </div>
+              </div>
+
+              <div class="form-group col-4" style="padding-left: 0;">
+                <label for="cfgReportHours">Horas de Envio (separadas por vírgula)</label>
+                <input type="text" id="cfgReportHours" placeholder="8,12,16" value="8,12,16">
+                <small style="font-size: 11px; color: #64748b; margin-top: 4px; display: block;">Padrão: 8, 12 e 16 horas (Horário de Brasília).</small>
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+              <button type="button" class="btn btn-secondary" onclick="fecharModalUsuarios()">Cancelar</button>
+              <button type="submit" class="btn btn-primary" id="btnSalvarCanais">
+                <span class="icon">💾</span> Salvar Configurações dos Canais
+              </button>
+            </div>
+          </form>
         </div>
       </div>
 

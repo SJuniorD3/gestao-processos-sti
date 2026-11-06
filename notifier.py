@@ -4,14 +4,26 @@ from email.mime.text import MIMEText
 import datetime
 import requests
 import json
+import config
 from config import (
     EMAIL_ENABLED, SMTP_SERVER, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_TO,
     WEBHOOK_URL
 )
 from database import (
     listar_processos, listar_projetos_com_processos, registrar_log_relatorio,
-    formatar_data_br, formatar_data_hora_br
+    formatar_data_br, formatar_data_hora_br, obter_configuracao, salvar_configuracao
 )
+
+def obter_config_canal(chave, default=""):
+    """Recupera valor dinâmico do banco de dados com fallback para o .env/config."""
+    try:
+        val = obter_configuracao(chave)
+        if val is not None and str(val).strip() != "":
+            return str(val).strip()
+    except Exception:
+        pass
+    val_cfg = getattr(config, chave, default)
+    return str(val_cfg).strip() if val_cfg is not None else str(default)
 
 def gerar_conteudo_resumo(tipo="Agendado", setor=None):
     """Gera tanto a versão HTML quanto a versão Texto/Markdown do resumo diário.
@@ -249,18 +261,31 @@ def gerar_conteudo_resumo(tipo="Agendado", setor=None):
     }
 
 def enviar_email(assunto, corpo_html, corpo_texto):
-    """Envia o e-mail via servidor SMTP configurado."""
-    if not EMAIL_ENABLED or not SMTP_USER or not EMAIL_TO:
-        return False, "Envio por e-mail desabilitado ou credenciais incompletas no .env"
+    """Envia o e-mail via servidor SMTP configurado (banco dinâmico ou .env)."""
+    email_enabled_str = obter_config_canal("EMAIL_ENABLED", "false").lower()
+    email_enabled = email_enabled_str in ("true", "1", "sim", "yes")
+    smtp_server = obter_config_canal("SMTP_SERVER", "smtp.gmail.com")
+    try:
+        smtp_port = int(obter_config_canal("SMTP_PORT", 587))
+    except ValueError:
+        smtp_port = 587
+    smtp_user = obter_config_canal("SMTP_USER", "")
+    smtp_pass = obter_config_canal("SMTP_PASS", "")
+    email_to = obter_config_canal("EMAIL_TO", "")
+
+    if not email_enabled:
+        return False, "Envio por e-mail desabilitado nas configurações"
+    if not smtp_user or not email_to:
+        return False, "E-mail de envio ou destinatários não configurados"
     
-    destinatarios = [e.strip() for e in EMAIL_TO.split(",") if e.strip()]
+    destinatarios = [e.strip() for e in email_to.split(",") if e.strip()]
     if not destinatarios:
         return False, "Nenhum destinatário de e-mail especificado."
         
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = assunto
-        msg["From"] = SMTP_USER
+        msg["From"] = smtp_user
         msg["To"] = ", ".join(destinatarios)
         
         part_text = MIMEText(corpo_texto, "plain", "utf-8")
@@ -268,52 +293,84 @@ def enviar_email(assunto, corpo_html, corpo_texto):
         msg.attach(part_text)
         msg.attach(part_html)
         
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=15)
+        server = smtplib.SMTP(smtp_server, smtp_port, timeout=15)
         server.starttls()
-        server.login(SMTP_USER, SMTP_PASS)
-        server.sendmail(SMTP_USER, destinatarios, msg.as_string())
+        server.login(smtp_user, smtp_pass)
+        server.sendmail(smtp_user, destinatarios, msg.as_string())
         server.quit()
         return True, f"Enviado para: {', '.join(destinatarios)}"
     except Exception as e:
         return False, f"Erro SMTP: {str(e)}"
 
+def testar_disparo_email():
+    """Envia um e-mail de teste imediato com as configurações ativas."""
+    agora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M:%S")
+    assunto = f"[STI TESTE] Validação de Conexão SMTP - {agora}"
+    corpo_texto = f"Este é um e-mail de teste do Sistema de Gestão de Processos da STI / SEDUC-MA.\nData/Hora: {agora}\nAs configurações SMTP foram testadas com sucesso!"
+    corpo_html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; border: 1px solid #cbd5e1; border-radius: 10px; max-width: 500px; margin: 0 auto;">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
+            <span style="font-size: 24px;">📧</span>
+            <h2 style="color: #1e3a8a; margin: 0; font-size: 18px;">Teste de Conexão SMTP</h2>
+        </div>
+        <p style="font-size: 13.5px; color: #334155; line-height: 1.5;">Este é um e-mail de teste automático disparado pelo <strong>Sistema de Gestão de Processos STI / SEDUC-MA</strong>.</p>
+        <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 12px; margin: 16px 0; color: #065f46; font-size: 13px;">
+            ✓ <strong>Conexão operacional:</strong> Os canais de disparo por e-mail estão funcionando perfeitamente!
+        </div>
+        <p style="font-size: 11px; color: #64748b; margin-top: 20px; border-top: 1px solid #f1f5f9; padding-top: 10px;">Disparado em: {agora} • Superintendência de Tecnologia da Informação (SEDUC-MA)</p>
+    </div>
+    """
+    return enviar_email(assunto, corpo_html, corpo_texto)
+
 def enviar_webhook(texto):
     """Envia o resumo para um Webhook configurado (WhatsApp API, Telegram, Teams, Discord)."""
-    if not WEBHOOK_URL:
-        return False, "Webhook não configurado no .env"
+    webhook_url = obter_config_canal("WEBHOOK_URL", "")
+    if not webhook_url:
+        return False, "Webhook não configurado"
     
     try:
         payload = {"text": texto, "content": texto}
-        resp = requests.post(WEBHOOK_URL, json=payload, timeout=10)
-        if resp.status_code in (200, 204):
+        resp = requests.post(webhook_url, json=payload, timeout=10)
+        if resp.status_code in (200, 201, 204):
             return True, f"Webhook disparado com sucesso (Status {resp.status_code})"
         else:
             return False, f"Webhook retornou status {resp.status_code}: {resp.text[:100]}"
     except Exception as e:
         return False, f"Erro ao chamar Webhook: {str(e)}"
 
+def testar_disparo_webhook():
+    """Envia um ping de teste imediato para a URL de Webhook ativa."""
+    agora = datetime.datetime.now().strftime("%d/%m/%Y às %H:%M:%S")
+    msg = f"🔔 [STI TESTE] Validação de Conexão de Webhook do Sistema de Gestão de Processos SEDUC-MA realizada em {agora}. Canal de notificação ativo e operacional!"
+    return enviar_webhook(msg)
+
 def executar_envio_resumo(tipo="Agendado"):
     """Função central chamada pelo agendador ou manualmente."""
     resumo = gerar_conteudo_resumo(tipo)
     assunto = f"[STI] Resumo de Processos ({tipo}) - {resumo['data_formatada']}"
     
+    email_enabled_str = obter_config_canal("EMAIL_ENABLED", "false").lower()
+    email_ativo = email_enabled_str in ("true", "1", "sim", "yes")
+    webhook_ativo = bool(obter_config_canal("WEBHOOK_URL", ""))
+
     status_email = "Não configurado"
-    if EMAIL_ENABLED:
+    if email_ativo:
         ok_mail, msg_mail = enviar_email(assunto, resumo["html"], resumo["texto"])
         status_email = "Sucesso: " + msg_mail if ok_mail else "Falha: " + msg_mail
         
     status_webhook = "Não configurado"
-    if WEBHOOK_URL:
+    if webhook_ativo:
         ok_hook, msg_hook = enviar_webhook(resumo["texto"])
         status_webhook = "Sucesso: " + msg_hook if ok_hook else "Falha: " + msg_hook
         
     status_final = f"Email: {status_email} | Webhook: {status_webhook}"
     
     # Registra no log de relatórios
+    email_to_str = obter_config_canal("EMAIL_TO", "")
     registrar_log_relatorio(
         tipo=tipo,
         total_processos=resumo["total"],
-        destinatarios=EMAIL_TO if EMAIL_ENABLED else "Nenhum (Log local)",
+        destinatarios=email_to_str if email_ativo else "Nenhum (Log local)",
         status=status_final,
         conteudo=resumo["texto"]
     )

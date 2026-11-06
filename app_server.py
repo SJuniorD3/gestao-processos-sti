@@ -27,11 +27,15 @@ from database import (
     listar_setores, obter_setor, obter_setor_por_sigla, criar_setor, atualizar_setor, excluir_setor,
     obter_usuario_por_login, obter_usuario_por_id, listar_usuarios, criar_usuario, atualizar_usuario, excluir_usuario,
     registrar_auditoria, listar_auditoria, verificar_senha,
+    obter_configuracao, salvar_configuracao, obter_todas_configuracoes,
     obter_processo_por_numero, obter_metricas_gargalos,
     listar_documentos_processo, salvar_documentos_processo, adicionar_documento_manual, excluir_documento_processo
 )
 from scheduler import scheduler
-from notifier import gerar_conteudo_resumo, gerar_relatorio_executivo_formal_html
+from notifier import (
+    gerar_conteudo_resumo, gerar_relatorio_executivo_formal_html,
+    obter_config_canal, testar_disparo_email, testar_disparo_webhook
+)
 from monitor_engine import executar_monitoramento_processos, monitorar_processo_individual
 from integrations import sei_client, startgov_client
 
@@ -372,6 +376,31 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json({"success": True, "data": logs})
             return
 
+        # Rota da API: Configurações dos Canais de Disparo (Admin)
+        if path == "/api/configuracoes/canais":
+            curr = self._require_role("admin")
+            if not curr:
+                return
+            email_enabled_str = obter_config_canal("EMAIL_ENABLED", "false").lower()
+            try:
+                smtp_port_val = int(obter_config_canal("SMTP_PORT", 587))
+            except ValueError:
+                smtp_port_val = 587
+            self._send_json({
+                "success": True,
+                "data": {
+                    "email_enabled": email_enabled_str in ("true", "1", "sim", "yes"),
+                    "smtp_server": obter_config_canal("SMTP_SERVER", "smtp.gmail.com"),
+                    "smtp_port": smtp_port_val,
+                    "smtp_user": obter_config_canal("SMTP_USER", ""),
+                    "email_to": obter_config_canal("EMAIL_TO", ""),
+                    "webhook_url": obter_config_canal("WEBHOOK_URL", ""),
+                    "report_hours": obter_config_canal("REPORT_HOURS", "8,12,16"),
+                    "tem_senha_smtp": bool(obter_config_canal("SMTP_PASS", ""))
+                }
+            })
+            return
+
         # Rota da API: Informações dos Sistemas Integrados
         if path == "/api/sistemas":
             self._send_json({
@@ -531,6 +560,60 @@ class ProcessosRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self._send_json({"success": True, "id": novo_id, "message": f"Setor '{sigla}' cadastrado com sucesso!"}, 201)
             except Exception as e:
                 self._send_json({"success": False, "error": str(e)}, 400)
+            return
+
+        # Salvar Configurações dos Canais de Disparo (Admin)
+        if path == "/api/configuracoes/canais":
+            curr = self._require_role("admin")
+            if not curr:
+                return
+            dados = self._read_json()
+            email_enabled = "true" if dados.get("email_enabled") in (True, "true", "1", 1) else "false"
+            salvar_configuracao("EMAIL_ENABLED", email_enabled)
+            
+            if "smtp_server" in dados:
+                salvar_configuracao("SMTP_SERVER", str(dados["smtp_server"]).strip())
+            if "smtp_port" in dados:
+                salvar_configuracao("SMTP_PORT", str(dados["smtp_port"]).strip())
+            if "smtp_user" in dados:
+                salvar_configuracao("SMTP_USER", str(dados["smtp_user"]).strip())
+            if "smtp_pass" in dados and str(dados["smtp_pass"]).strip():
+                salvar_configuracao("SMTP_PASS", str(dados["smtp_pass"]).strip())
+            if "email_to" in dados:
+                salvar_configuracao("EMAIL_TO", str(dados["email_to"]).strip())
+            if "webhook_url" in dados:
+                salvar_configuracao("WEBHOOK_URL", str(dados["webhook_url"]).strip())
+            if "report_hours" in dados:
+                salvar_configuracao("REPORT_HOURS", str(dados["report_hours"]).strip())
+
+            registrar_auditoria(curr["usuario"], "CONFIG_CANAIS", "Atualizou configurações de disparo (E-mail / Webhook)", self._get_client_ip())
+            self._send_json({"success": True, "message": "Configurações dos canais salvas com sucesso!"})
+            return
+
+        # Testar Disparo por E-mail (Admin)
+        if path == "/api/configuracoes/canais/testar-email":
+            curr = self._require_role("admin")
+            if not curr:
+                return
+            ok, msg = testar_disparo_email()
+            registrar_auditoria(curr["usuario"], "TESTE_EMAIL", f"Resultado teste SMTP: {msg}", self._get_client_ip())
+            if ok:
+                self._send_json({"success": True, "message": msg})
+            else:
+                self._send_json({"success": False, "error": msg}, 400)
+            return
+
+        # Testar Disparo por Webhook (Admin)
+        if path == "/api/configuracoes/canais/testar-webhook":
+            curr = self._require_role("admin")
+            if not curr:
+                return
+            ok, msg = testar_disparo_webhook()
+            registrar_auditoria(curr["usuario"], "TESTE_WEBHOOK", f"Resultado teste Webhook: {msg}", self._get_client_ip())
+            if ok:
+                self._send_json({"success": True, "message": msg})
+            else:
+                self._send_json({"success": False, "error": msg}, 400)
             return
 
         # Cadastrar Novo Usuário (Admin)

@@ -1886,13 +1886,15 @@ function fecharModalUsuarios() {
 function alternarAbaUsuarios(aba) {
   const btnU = document.getElementById("tabBtnUsuarios");
   const btnS = document.getElementById("tabBtnSetores");
+  const btnC = document.getElementById("tabBtnCanais");
   const btnA = document.getElementById("tabBtnAuditoria");
   const abaU = document.getElementById("abaConteudoUsuarios");
   const abaS = document.getElementById("abaConteudoSetores");
+  const abaC = document.getElementById("abaConteudoCanais");
   const abaA = document.getElementById("abaConteudoAuditoria");
 
   // Reset tabs
-  [btnU, btnS, btnA].forEach(b => {
+  [btnU, btnS, btnC, btnA].forEach(b => {
     if (b) {
       b.className = "view-btn";
       b.style.borderBottom = "none";
@@ -1901,6 +1903,7 @@ function alternarAbaUsuarios(aba) {
   });
   if (abaU) abaU.style.display = "none";
   if (abaS) abaS.style.display = "none";
+  if (abaC) abaC.style.display = "none";
   if (abaA) abaA.style.display = "none";
 
   if (aba === "usuarios") {
@@ -1919,6 +1922,14 @@ function alternarAbaUsuarios(aba) {
     }
     if (abaS) abaS.style.display = "block";
     carregarSetores().then(() => renderizarTabelaSetores(setoresCache));
+  } else if (aba === "canais") {
+    if (btnC) {
+      btnC.className = "view-btn active";
+      btnC.style.borderBottom = "2px solid #2563eb";
+      btnC.style.fontWeight = "700";
+    }
+    if (abaC) abaC.style.display = "block";
+    carregarConfiguracoesCanais();
   } else {
     if (btnA) {
       btnA.className = "view-btn active";
@@ -2833,4 +2844,153 @@ async function excluirDocumento(docId) {
       }
     }
   });
+}
+
+// -------------------------------------------------------------
+// GESTÃO DOS CANAIS DE DISPARO (E-MAIL & WEBHOOK)
+// -------------------------------------------------------------
+async function carregarConfiguracoesCanais() {
+  try {
+    const res = await fetch("/api/configuracoes/canais");
+    const json = await res.json();
+    if (json.success && json.data) {
+      const d = json.data;
+      const elEmail = document.getElementById("cfgEmailEnabled");
+      const elServer = document.getElementById("cfgSmtpServer");
+      const elPort = document.getElementById("cfgSmtpPort");
+      const elUser = document.getElementById("cfgSmtpUser");
+      const elPass = document.getElementById("cfgSmtpPass");
+      const elTo = document.getElementById("cfgEmailTo");
+      const elHook = document.getElementById("cfgWebhookUrl");
+      const elHours = document.getElementById("cfgReportHours");
+      const dicaSenha = document.getElementById("msgDicaSenhaSMTP");
+
+      if (elEmail) elEmail.checked = Boolean(d.email_enabled);
+      if (elServer) elServer.value = d.smtp_server || "smtp.gmail.com";
+      if (elPort) elPort.value = d.smtp_port || 587;
+      if (elUser) elUser.value = d.smtp_user || "";
+      if (elPass) elPass.value = "";
+      if (elTo) elTo.value = d.email_to || "";
+      if (elHook) elHook.value = d.webhook_url || "";
+      if (elHours) elHours.value = d.report_hours || "8,12,16";
+
+      if (dicaSenha) {
+        if (d.tem_senha_smtp) {
+          dicaSenha.innerHTML = "✓ <strong style='color:#059669;'>Senha SMTP já configurada no servidor.</strong> Deixe o campo em branco para manter a atual.";
+        } else {
+          dicaSenha.innerHTML = "Para Gmail, use uma Senha de App de 16 dígitos gerada na Conta Google.";
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Erro ao carregar configurações de canais:", err);
+  }
+}
+
+async function salvarConfiguracoesCanais(e) {
+  if (e) e.preventDefault();
+  const btn = document.getElementById("btnSalvarCanais");
+  const original = btn ? btn.innerHTML : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = "<span>Salvando...</span>";
+  }
+
+  const payload = {
+    email_enabled: document.getElementById("cfgEmailEnabled") ? document.getElementById("cfgEmailEnabled").checked : false,
+    smtp_server: document.getElementById("cfgSmtpServer") ? document.getElementById("cfgSmtpServer").value.trim() : "",
+    smtp_port: document.getElementById("cfgSmtpPort") ? document.getElementById("cfgSmtpPort").value.trim() : 587,
+    smtp_user: document.getElementById("cfgSmtpUser") ? document.getElementById("cfgSmtpUser").value.trim() : "",
+    email_to: document.getElementById("cfgEmailTo") ? document.getElementById("cfgEmailTo").value.trim() : "",
+    webhook_url: document.getElementById("cfgWebhookUrl") ? document.getElementById("cfgWebhookUrl").value.trim() : "",
+    report_hours: document.getElementById("cfgReportHours") ? document.getElementById("cfgReportHours").value.trim() : "8,12,16"
+  };
+
+  const passVal = document.getElementById("cfgSmtpPass") ? document.getElementById("cfgSmtpPass").value.trim() : "";
+  if (passVal) {
+    payload.smtp_pass = passVal;
+  }
+
+  try {
+    const res = await fetch("/api/configuracoes/canais", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast("✓ Configurações dos canais salvas com sucesso!", "sucesso");
+      await carregarConfiguracoesCanais();
+    } else {
+      showToast("Erro ao salvar: " + (json.error || "Falha na requisição"), "erro");
+    }
+  } catch (err) {
+    console.error(err);
+    showToast("Erro ao conectar ao servidor para salvar canais.", "erro");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  }
+}
+
+async function testarConexaoEmail() {
+  const btn = document.getElementById("btnTestarEmail");
+  const original = btn ? btn.innerHTML : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = "<span>Enviando e-mail de teste...</span>";
+  }
+
+  try {
+    const res = await fetch("/api/configuracoes/canais/testar-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast("✓ " + (json.message || "E-mail de teste enviado com sucesso!"), "sucesso", 4000);
+    } else {
+      showToast("⚠️ Falha no teste SMTP: " + (json.error || "Erro desconhecido"), "erro", 5000);
+    }
+  } catch (err) {
+    console.error(err);
+    showToast("Erro ao conectar para envio do e-mail de teste.", "erro");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  }
+}
+
+async function testarConexaoWebhook() {
+  const btn = document.getElementById("btnTestarWebhook");
+  const original = btn ? btn.innerHTML : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = "<span>Disparando webhook de teste...</span>";
+  }
+
+  try {
+    const res = await fetch("/api/configuracoes/canais/testar-webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    });
+    const json = await res.json();
+    if (json.success) {
+      showToast("✓ " + (json.message || "Webhook disparado com sucesso!"), "sucesso", 4000);
+    } else {
+      showToast("⚠️ Falha no teste do Webhook: " + (json.error || "Erro desconhecido"), "erro", 5000);
+    }
+  } catch (err) {
+    console.error(err);
+    showToast("Erro ao conectar para disparo do webhook de teste.", "erro");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = original;
+    }
+  }
 }
